@@ -1,0 +1,13 @@
+node_modules/
+
+# Variables d'environnement : seul .env.example est versionné
+.env
+.env.*
+!.env.example
+
+# Client Prisma généré (recréé par npm ci via postinstall)
+/src/generated/
+
+# Divers
+*.log
+.DS_Store

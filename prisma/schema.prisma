@@ -1,0 +1,40 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Ouvrage {
+  id         Int       @id @default(autoincrement())
+  titre      String    @db.VarChar(150)
+  auteur     String    @db.VarChar(120)
+  annee      Int
+  disponible Boolean   @default(true)
+  creeLe     DateTime  @default(now()) @map("cree_le")
+  modifieLe  DateTime  @updatedAt @map("modifie_le")
+  emprunts   Emprunt[]
+
+  @@index([disponible])
+  @@map("ouvrages")
+}
+
+model Emprunt {
+  id               Int       @id @default(autoincrement())
+  ouvrageId        Int       @map("ouvrage_id")
+  // Restrict : on ne supprime pas un ouvrage qui a un historique d'emprunts (P2003 → 409).
+  ouvrage          Ouvrage   @relation(fields: [ouvrageId], references: [id], onDelete: Restrict)
+  emprunteur       String    @db.VarChar(80)
+  dateEmprunt      DateTime  @map("date_emprunt")
+  dateRetourPrevue DateTime  @map("date_retour_prevue")
+  rendu            Boolean   @default(false)
+  renduLe          DateTime? @map("rendu_le")
+  creeLe           DateTime  @default(now()) @map("cree_le")
+  modifieLe        DateTime  @updatedAt @map("modifie_le")
+
+  @@index([ouvrageId])
+  @@index([rendu])
+  @@map("emprunts")
+}

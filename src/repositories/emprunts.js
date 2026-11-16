@@ -1,0 +1,98 @@
+import { prisma } from "../db.js";
+import { Conflit, NonTrouve, RequeteInvalide } from "../erreurs.js";
+
+const avecOuvrage = { ouvrage: { select: { id: true, titre: true, auteur: true } } };
+
+function verifierOrdreDates(dateEmprunt, dateRetourPrevue) {
+  if (dateRetourPrevue < dateEmprunt) {
+    throw new RequeteInvalide("Validation échouée", [
+      { champ: "dateRetourPrevue", message: "doit être postérieure ou égale à dateEmprunt" },
+    ]);
+  }
+}
+
+export async function lister({ page, limite, rendu, ouvrageId }) {
+  const where = {};
+  if (rendu !== undefined) where.rendu = rendu;
+  if (ouvrageId !== undefined) where.ouvrageId = ouvrageId;
+
+  const [donnees, total] = await prisma.$transaction([
+    prisma.emprunt.findMany({
+      where,
+      include: avecOuvrage,
+      orderBy: { id: "asc" },
+      skip: (page - 1) * limite,
+      take: limite,
+    }),
+    prisma.emprunt.count({ where }),
+  ]);
+  return { donnees, total };
+}
+
+export async function trouver(id) {
+  const emprunt = await prisma.emprunt.findUnique({ where: { id }, include: avecOuvrage });
+  if (!emprunt) throw new NonTrouve(`Emprunt ${id} introuvable`);
+  return emprunt;
+}
+
+/**
+ * Crée l'emprunt et rend l'ouvrage indisponible dans la même transaction.
+ * La mise à jour conditionnelle (disponible: true) empêche deux emprunts simultanés
+ * du même ouvrage : le second ne modifie aucune ligne et reçoit 409, sans rien écrire.
+ */
+export async function creer({ ouvrageId, emprunteur, dateEmprunt = new Date(), dateRetourPrevue }) {
+  verifierOrdreDates(dateEmprunt, dateRetourPrevue);
+
+  return prisma.$transaction(async (tx) => {
+    const { count } = await tx.ouvrage.updateMany({
+      where: { id: ouvrageId, disponible: true },
+      data: { disponible: false },
+    });
+    if (count === 0) {
+      const existe = await tx.ouvrage.findUnique({ where: { id: ouvrageId }, select: { id: true } });
+      if (!existe) throw new NonTrouve(`Ouvrage ${ouvrageId} introuvable`);
+      throw new Conflit(`Ouvrage ${ouvrageId} indisponible : il est déjà emprunté`);
+    }
+    return tx.emprunt.create({
+      data: { ouvrageId, emprunteur, dateEmprunt, dateRetourPrevue },
+      include: avecOuvrage,
+    });
+  });
+}
+
+export async function modifier(id, donnees) {
+  const actuel = await trouver(id);
+  verifierOrdreDates(
+    donnees.dateEmprunt ?? actuel.dateEmprunt,
+    donnees.dateRetourPrevue ?? actuel.dateRetourPrevue,
+  );
+  return prisma.emprunt.update({ where: { id }, data: donnees, include: avecOuvrage });
+}
+
+/** Marque l'emprunt rendu et l'ouvrage de nouveau disponible, atomiquement. */
+export async function retourner(id) {
+  return prisma.$transaction(async (tx) => {
+    const { count } = await tx.emprunt.updateMany({
+      where: { id, rendu: false },
+      data: { rendu: true, renduLe: new Date() },
+    });
+    if (count === 0) {
+      const existe = await tx.emprunt.findUnique({ where: { id }, select: { id: true } });
+      if (!existe) throw new NonTrouve(`Emprunt ${id} introuvable`);
+      throw new Conflit(`Emprunt ${id} déjà rendu`);
+    }
+    const emprunt = await tx.emprunt.findUniqueOrThrow({ where: { id } });
+    await tx.ouvrage.update({ where: { id: emprunt.ouvrageId }, data: { disponible: true } });
+    return tx.emprunt.findUniqueOrThrow({ where: { id }, include: avecOuvrage });
+  });
+}
+
+/** Supprimer un emprunt en cours libère l'ouvrage. Identifiant inconnu : P2025 → 404. */
+export async function supprimer(id) {
+  await prisma.$transaction(async (tx) => {
+    const emprunt = await tx.emprunt.delete({ where: { id } });
+    if (!emprunt.rendu) {
+      await tx.ouvrage.update({ where: { id: emprunt.ouvrageId }, data: { disponible: true } });
+    }
+  });
+}

@@ -1,0 +1,239 @@
+### Requêtes de test — extension VS Code « REST Client »
+### Lancer d'abord : npm run seed, puis npm run dev.
+### Les identifiants supposent un seed fraîchement rejoué (ouvrages 1 à 10, emprunts 1 à 3).
+
+@base = http://localhost:3000
+@json = application/json
+
+### Santé de l'API (200)
+GET {{base}}/sante
+
+# =====================================================================
+# OUVRAGES
+# =====================================================================
+
+### Lister (200, pagination par défaut : page 1, limite 10)
+GET {{base}}/api/ouvrages
+
+### Lister page 2, 3 par page (200)
+GET {{base}}/api/ouvrages?page=2&limite=3
+
+### Filtrer les ouvrages disponibles (200)
+GET {{base}}/api/ouvrages?disponible=true
+
+### Filtrer les ouvrages empruntés (200)
+GET {{base}}/api/ouvrages?disponible=false
+
+### Limite plafonnée à 50 (200, pagination.limite = 50)
+GET {{base}}/api/ouvrages?limite=500
+
+### Erreur : query string invalide (400)
+GET {{base}}/api/ouvrages?page=0&disponible=oui
+
+### Détail avec les emprunts en cours (200)
+GET {{base}}/api/ouvrages/1
+
+### Erreur : identifiant mal formé (400)
+GET {{base}}/api/ouvrages/abc
+
+### Erreur : identifiant inconnu (404)
+GET {{base}}/api/ouvrages/9999
+
+### Créer un ouvrage (201) — « isbn » et « disponible » sont ignorés
+# @name nouvelOuvrage
+POST {{base}}/api/ouvrages
+Content-Type: {{json}}
+
+{
+  "titre": "Nana",
+  "auteur": "Émile Zola",
+  "annee": 1880,
+  "isbn": "champ inconnu ignoré",
+  "disponible": false
+}
+
+### Erreur : corps invalide, liste des champs fautifs (400)
+POST {{base}}/api/ouvrages
+Content-Type: {{json}}
+
+{
+  "titre": "",
+  "annee": 3000
+}
+
+### Erreur : année antérieure à 1450 (400)
+POST {{base}}/api/ouvrages
+Content-Type: {{json}}
+
+{
+  "titre": "Manuscrit",
+  "auteur": "Anonyme",
+  "annee": 1200
+}
+
+### Erreur : JSON mal formé (400)
+POST {{base}}/api/ouvrages
+Content-Type: {{json}}
+
+{ "titre":
+
+### Modifier partiellement (200)
+PATCH {{base}}/api/ouvrages/{{nouvelOuvrage.response.body.id}}
+Content-Type: {{json}}
+
+{
+  "annee": 1881
+}
+
+### Erreur : PATCH sans aucun champ modifiable (400)
+PATCH {{base}}/api/ouvrages/{{nouvelOuvrage.response.body.id}}
+Content-Type: {{json}}
+
+{}
+
+### Erreur : PATCH sur un ouvrage inconnu (404, P2025)
+PATCH {{base}}/api/ouvrages/9999
+Content-Type: {{json}}
+
+{
+  "annee": 1900
+}
+
+### Erreur : supprimer un ouvrage emprunté (409)
+DELETE {{base}}/api/ouvrages/1
+
+### Erreur : supprimer un ouvrage ayant un historique d'emprunts (409, P2003)
+DELETE {{base}}/api/ouvrages/2
+
+### Supprimer un ouvrage sans emprunt (204)
+DELETE {{base}}/api/ouvrages/{{nouvelOuvrage.response.body.id}}
+
+### Erreur : supprimer un ouvrage inconnu (404)
+DELETE {{base}}/api/ouvrages/9999
+
+# =====================================================================
+# EMPRUNTS
+# =====================================================================
+
+### Lister (200)
+GET {{base}}/api/emprunts
+
+### Filtrer les emprunts en cours (200)
+GET {{base}}/api/emprunts?rendu=false
+
+### Filtrer les emprunts rendus, 1 par page (200)
+GET {{base}}/api/emprunts?rendu=true&page=1&limite=1
+
+### Erreur : filtre invalide (400)
+GET {{base}}/api/emprunts?rendu=peut-etre&limite=-3
+
+### Détail (200)
+GET {{base}}/api/emprunts/1
+
+### Erreur : identifiant mal formé (400)
+GET {{base}}/api/emprunts/1.5
+
+### Erreur : identifiant inconnu (404)
+GET {{base}}/api/emprunts/9999
+
+### Emprunter l'ouvrage 3 (201) — l'ouvrage devient indisponible dans la même transaction
+# @name nouvelEmprunt
+POST {{base}}/api/emprunts
+Content-Type: {{json}}
+
+{
+  "ouvrageId": 3,
+  "emprunteur": "Zoé",
+  "dateEmprunt": "2026-11-16",
+  "dateRetourPrevue": "2026-12-07"
+}
+
+### Vérifier : l'ouvrage 3 est indisponible et liste l'emprunt en cours (200)
+GET {{base}}/api/ouvrages/3
+
+### Erreur : emprunter un ouvrage déjà emprunté (409, rien n'est écrit)
+POST {{base}}/api/emprunts
+Content-Type: {{json}}
+
+{
+  "ouvrageId": 3,
+  "emprunteur": "Hugo",
+  "dateRetourPrevue": "2026-12-07"
+}
+
+### Erreur : emprunter un ouvrage inconnu (404)
+POST {{base}}/api/emprunts
+Content-Type: {{json}}
+
+{
+  "ouvrageId": 9999,
+  "emprunteur": "Hugo",
+  "dateRetourPrevue": "2026-12-07"
+}
+
+### Erreur : nom trop court et date non ISO (400)
+POST {{base}}/api/emprunts
+Content-Type: {{json}}
+
+{
+  "ouvrageId": 5,
+  "emprunteur": "H",
+  "dateRetourPrevue": "07/12/2026"
+}
+
+### Erreur : retour prévu avant la date d'emprunt (400)
+POST {{base}}/api/emprunts
+Content-Type: {{json}}
+
+{
+  "ouvrageId": 5,
+  "emprunteur": "Hugo",
+  "dateEmprunt": "2026-12-10",
+  "dateRetourPrevue": "2026-12-01"
+}
+
+### Modifier la date de retour prévue (200)
+PATCH {{base}}/api/emprunts/{{nouvelEmprunt.response.body.id}}
+Content-Type: {{json}}
+
+{
+  "dateRetourPrevue": "2026-12-20T18:00:00Z"
+}
+
+### Erreur : PATCH avec un nom trop long (400)
+PATCH {{base}}/api/emprunts/{{nouvelEmprunt.response.body.id}}
+Content-Type: {{json}}
+
+{
+  "emprunteur": "Nom beaucoup trop long pour un emprunteur fictif, au-delà des quatre-vingts caractères autorisés"
+}
+
+### Erreur : PATCH sur un emprunt inconnu (404)
+PATCH {{base}}/api/emprunts/9999
+Content-Type: {{json}}
+
+{
+  "emprunteur": "Hugo"
+}
+
+### Marquer l'emprunt rendu (200) — l'ouvrage redevient disponible
+POST {{base}}/api/emprunts/{{nouvelEmprunt.response.body.id}}/retour
+
+### Erreur : emprunt déjà rendu (409)
+POST {{base}}/api/emprunts/{{nouvelEmprunt.response.body.id}}/retour
+
+### Erreur : retour d'un emprunt inconnu (404)
+POST {{base}}/api/emprunts/9999/retour
+
+### Supprimer un emprunt (204) — s'il était en cours, l'ouvrage est libéré
+DELETE {{base}}/api/emprunts/{{nouvelEmprunt.response.body.id}}
+
+### Erreur : supprimer un emprunt inconnu (404)
+DELETE {{base}}/api/emprunts/9999
+
+# =====================================================================
+# DIVERS
+# =====================================================================
+
+### Erreur : route inconnue (404)
+GET {{base}}/api/auteurs
