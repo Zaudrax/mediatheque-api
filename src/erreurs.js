@@ -17,6 +17,19 @@ export class RequeteInvalide extends ErreurApi {
   }
 }
 
+export class NonAuthentifie extends ErreurApi {
+  constructor(message = "Authentification requise") {
+    super(401, message);
+    this.entetes = { "WWW-Authenticate": 'Bearer realm="mediatheque-api"' };
+  }
+}
+
+export class Interdit extends ErreurApi {
+  constructor(message = "Accès refusé") {
+    super(403, message);
+  }
+}
+
 export class NonTrouve extends ErreurApi {
   constructor(message = "Ressource introuvable") {
     super(404, message);
