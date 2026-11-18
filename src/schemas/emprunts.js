@@ -1,8 +1,6 @@
 import { z } from "zod";
 import { booleenQuery, dateIso, identifiant, pagination } from "./commun.js";
 
-const emprunteur = z.string().trim().min(2).max(80);
-
 const retourApresEmprunt = (corps) =>
   !corps.dateEmprunt || !corps.dateRetourPrevue || corps.dateRetourPrevue >= corps.dateEmprunt;
 const erreurOrdreDates = {
@@ -10,26 +8,29 @@ const erreurOrdreDates = {
   path: ["dateRetourPrevue"],
 };
 
+/**
+ * emprunteurId n'est pris en compte que pour un bibliothécaire (emprunt au nom d'un membre).
+ * Pour un membre, la route impose son propre identifiant : il emprunte toujours pour lui-même.
+ */
 export const creerEmprunt = z
   .object({
     ouvrageId: identifiant,
-    emprunteur,
+    emprunteurId: identifiant.optional(),
     // Par défaut, l'emprunt commence maintenant.
     dateEmprunt: dateIso.optional(),
     dateRetourPrevue: dateIso,
   })
   .refine(retourApresEmprunt, erreurOrdreDates);
 
-// L'ouvrage et le statut « rendu » ne se modifient pas par PATCH
-// (le retour passe par POST /api/emprunts/:id/retour).
+// Ni l'ouvrage, ni le propriétaire (emprunteurId), ni le statut « rendu » ne se modifient par PATCH :
+// ces champs sont absents du schéma, donc ignorés s'ils sont envoyés.
 export const modifierEmprunt = z
   .object({
-    emprunteur: emprunteur.optional(),
     dateEmprunt: dateIso.optional(),
     dateRetourPrevue: dateIso.optional(),
   })
   .refine((corps) => Object.values(corps).some((v) => v !== undefined), {
-    error: "au moins un champ parmi emprunteur, dateEmprunt, dateRetourPrevue est requis",
+    error: "au moins un champ parmi dateEmprunt, dateRetourPrevue est requis",
   })
   .refine(retourApresEmprunt, erreurOrdreDates);
 
@@ -37,4 +38,6 @@ export const listerEmprunts = z.object({
   ...pagination,
   rendu: booleenQuery.optional(),
   ouvrageId: identifiant.optional(),
+  // Filtre réservé aux bibliothécaires ; un membre est toujours limité à ses emprunts.
+  emprunteurId: identifiant.optional(),
 });

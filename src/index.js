@@ -1,10 +1,17 @@
-import { app } from "./app.js";
+import { creerApp } from "./app.js";
+import { lireConfig } from "./config.js";
 import { prisma } from "./db.js";
 
-const port = Number(process.env.PORT) || 3000;
+const config = lireConfig();
+const app = creerApp(config);
 
-const serveur = app.listen(port, () => {
-  console.log(`API médiathèque à l'écoute sur http://localhost:${port}`);
+// En Express 5, une erreur d'écoute (port déjà pris…) est passée au callback.
+const serveur = app.listen(config.port, (err) => {
+  if (err) {
+    console.error(`Impossible d'écouter sur le port ${config.port} : ${err.message}`);
+    process.exit(1);
+  }
+  console.log(`API médiathèque à l'écoute sur http://localhost:${config.port}`);
 });
 
 async function arreter(signal) {
