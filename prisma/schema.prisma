@@ -21,12 +21,44 @@ model Ouvrage {
   @@map("ouvrages")
 }
 
+enum Role {
+  membre
+  bibliothecaire
+}
+
+model Utilisateur {
+  id              Int            @id @default(autoincrement())
+  email           String         @unique @db.VarChar(254)
+  motDePasseHache String         @map("mot_de_passe_hache") @db.VarChar(100)
+  role            Role           @default(membre)
+  creeLe          DateTime       @default(now()) @map("cree_le")
+  modifieLe       DateTime       @updatedAt @map("modifie_le")
+  emprunts        Emprunt[]
+  refreshTokens   RefreshToken[]
+
+  @@map("utilisateurs")
+}
+
+/// Un refresh token émis : seul son identifiant (jti) est stocké, jamais le jeton lui-même.
+model RefreshToken {
+  id            String      @id @db.Uuid
+  utilisateurId Int         @map("utilisateur_id")
+  utilisateur   Utilisateur @relation(fields: [utilisateurId], references: [id], onDelete: Cascade)
+  expireLe      DateTime    @map("expire_le")
+  revoqueLe     DateTime?   @map("revoque_le")
+  creeLe        DateTime    @default(now()) @map("cree_le")
+
+  @@index([utilisateurId])
+  @@map("refresh_tokens")
+}
+
 model Emprunt {
-  id               Int       @id @default(autoincrement())
-  ouvrageId        Int       @map("ouvrage_id")
+  id               Int         @id @default(autoincrement())
+  ouvrageId        Int         @map("ouvrage_id")
   // Restrict : on ne supprime pas un ouvrage qui a un historique d'emprunts (P2003 → 409).
-  ouvrage          Ouvrage   @relation(fields: [ouvrageId], references: [id], onDelete: Restrict)
-  emprunteur       String    @db.VarChar(80)
+  ouvrage          Ouvrage     @relation(fields: [ouvrageId], references: [id], onDelete: Restrict)
+  emprunteurId     Int         @map("emprunteur_id")
+  emprunteur       Utilisateur @relation(fields: [emprunteurId], references: [id], onDelete: Restrict)
   dateEmprunt      DateTime  @map("date_emprunt")
   dateRetourPrevue DateTime  @map("date_retour_prevue")
   rendu            Boolean   @default(false)
@@ -35,6 +67,7 @@ model Emprunt {
   modifieLe        DateTime  @updatedAt @map("modifie_le")
 
   @@index([ouvrageId])
+  @@index([emprunteurId])
   @@index([rendu])
   @@map("emprunts")
 }
