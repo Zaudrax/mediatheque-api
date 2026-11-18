@@ -15,12 +15,15 @@ export async function lister({ page, limite, disponible }) {
   return { donnees, total };
 }
 
-/** Un ouvrage avec ses emprunts en cours (non rendus). */
-export async function trouver(id) {
+/**
+ * Un ouvrage avec ses emprunts en cours (non rendus).
+ * portee restreint les emprunts visibles : un membre ne voit que les siens.
+ */
+export async function trouver(id, portee = {}) {
   const ouvrage = await prisma.ouvrage.findUnique({
     where: { id },
     include: {
-      emprunts: { where: { rendu: false }, orderBy: { dateEmprunt: "asc" } },
+      emprunts: { where: { rendu: false, ...portee }, orderBy: { dateEmprunt: "asc" } },
     },
   });
   if (!ouvrage) throw new NonTrouve(`Ouvrage ${id} introuvable`);

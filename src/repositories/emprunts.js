@@ -1,7 +1,16 @@
 import { prisma } from "../db.js";
 import { Conflit, NonTrouve, RequeteInvalide } from "../erreurs.js";
 
-const avecOuvrage = { ouvrage: { select: { id: true, titre: true, auteur: true } } };
+const inclure = {
+  ouvrage: { select: { id: true, titre: true, auteur: true } },
+  emprunteur: { select: { id: true, email: true } },
+};
+
+/**
+ * La « portée » limite les emprunts accessibles : {} pour un bibliothécaire,
+ * { emprunteurId } pour un membre. Un emprunt hors portée est traité comme inexistant (404),
+ * pour ne pas révéler son existence.
+ */
 
 function verifierOrdreDates(dateEmprunt, dateRetourPrevue) {
   if (dateRetourPrevue < dateEmprunt) {
@@ -11,15 +20,17 @@ function verifierOrdreDates(dateEmprunt, dateRetourPrevue) {
   }
 }
 
-export async function lister({ page, limite, rendu, ouvrageId }) {
+export async function lister({ page, limite, rendu, ouvrageId, emprunteurId }, portee = {}) {
   const where = {};
   if (rendu !== undefined) where.rendu = rendu;
   if (ouvrageId !== undefined) where.ouvrageId = ouvrageId;
+  if (emprunteurId !== undefined) where.emprunteurId = emprunteurId;
+  Object.assign(where, portee); // la portée l'emporte sur les filtres du client
 
   const [donnees, total] = await prisma.$transaction([
     prisma.emprunt.findMany({
       where,
-      include: avecOuvrage,
+      include: inclure,
       orderBy: { id: "asc" },
       skip: (page - 1) * limite,
       take: limite,
@@ -29,8 +40,8 @@ export async function lister({ page, limite, rendu, ouvrageId }) {
   return { donnees, total };
 }
 
-export async function trouver(id) {
-  const emprunt = await prisma.emprunt.findUnique({ where: { id }, include: avecOuvrage });
+export async function trouver(id, portee = {}) {
+  const emprunt = await prisma.emprunt.findFirst({ where: { id, ...portee }, include: inclure });
   if (!emprunt) throw new NonTrouve(`Emprunt ${id} introuvable`);
   return emprunt;
 }
@@ -40,10 +51,13 @@ export async function trouver(id) {
  * La mise à jour conditionnelle (disponible: true) empêche deux emprunts simultanés
  * du même ouvrage : le second ne modifie aucune ligne et reçoit 409, sans rien écrire.
  */
-export async function creer({ ouvrageId, emprunteur, dateEmprunt = new Date(), dateRetourPrevue }) {
+export async function creer({ ouvrageId, emprunteurId, dateEmprunt = new Date(), dateRetourPrevue }) {
   verifierOrdreDates(dateEmprunt, dateRetourPrevue);
 
   return prisma.$transaction(async (tx) => {
+    const emprunteur = await tx.utilisateur.findUnique({ where: { id: emprunteurId }, select: { id: true } });
+    if (!emprunteur) throw new NonTrouve(`Utilisateur ${emprunteurId} introuvable`);
+
     const { count } = await tx.ouvrage.updateMany({
       where: { id: ouvrageId, disponible: true },
       data: { disponible: false },
@@ -54,36 +68,36 @@ export async function creer({ ouvrageId, emprunteur, dateEmprunt = new Date(), d
       throw new Conflit(`Ouvrage ${ouvrageId} indisponible : il est déjà emprunté`);
     }
     return tx.emprunt.create({
-      data: { ouvrageId, emprunteur, dateEmprunt, dateRetourPrevue },
-      include: avecOuvrage,
+      data: { ouvrageId, emprunteurId, dateEmprunt, dateRetourPrevue },
+      include: inclure,
     });
   });
 }
 
-export async function modifier(id, donnees) {
-  const actuel = await trouver(id);
+export async function modifier(id, donnees, portee = {}) {
+  const actuel = await trouver(id, portee);
   verifierOrdreDates(
     donnees.dateEmprunt ?? actuel.dateEmprunt,
     donnees.dateRetourPrevue ?? actuel.dateRetourPrevue,
   );
-  return prisma.emprunt.update({ where: { id }, data: donnees, include: avecOuvrage });
+  return prisma.emprunt.update({ where: { id }, data: donnees, include: inclure });
 }
 
 /** Marque l'emprunt rendu et l'ouvrage de nouveau disponible, atomiquement. */
-export async function retourner(id) {
+export async function retourner(id, portee = {}) {
   return prisma.$transaction(async (tx) => {
     const { count } = await tx.emprunt.updateMany({
-      where: { id, rendu: false },
+      where: { id, rendu: false, ...portee },
       data: { rendu: true, renduLe: new Date() },
     });
     if (count === 0) {
-      const existe = await tx.emprunt.findUnique({ where: { id }, select: { id: true } });
+      const existe = await tx.emprunt.findFirst({ where: { id, ...portee }, select: { id: true } });
       if (!existe) throw new NonTrouve(`Emprunt ${id} introuvable`);
       throw new Conflit(`Emprunt ${id} déjà rendu`);
     }
     const emprunt = await tx.emprunt.findUniqueOrThrow({ where: { id } });
     await tx.ouvrage.update({ where: { id: emprunt.ouvrageId }, data: { disponible: true } });
-    return tx.emprunt.findUniqueOrThrow({ where: { id }, include: avecOuvrage });
+    return tx.emprunt.findUniqueOrThrow({ where: { id }, include: inclure });
   });
 }
 
