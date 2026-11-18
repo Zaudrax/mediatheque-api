@@ -76,7 +76,7 @@ Générer deux valeurs distinctes pour `JWT_ACCESS_SECRET` et `JWT_REFRESH_SECRE
 | `npm run db:down`    | Arrête PostgreSQL (les données sont conservées dans un volume)        |
 | `npm run db:migrate` | Crée et applique une migration en développement                       |
 | `npm run db:deploy`  | Applique les migrations existantes                                    |
-| `npm run seed`       | Rejoue le jeu de démonstration (rejouable, sans doublon)              |
+| `npm run seed`       | Rejoue le jeu de démonstration (rejouable, sans doublon) ; refusé si `NODE_ENV=production`, car il vide les tables |
 | `npm test`           | Applique les migrations sur la base de test puis lance les tests      |
 
 ## Authentification
@@ -213,8 +213,12 @@ Les listes sont paginées :
 ## Règles métier
 
 - Créer un emprunt rend l'ouvrage indisponible dans la même transaction. La mise à jour est conditionnelle (`disponible = true`) : si deux emprunts du même ouvrage arrivent en même temps, un seul réussit, l'autre reçoit **409** et rien n'est écrit.
+- `PATCH /api/emprunts/:id` lit et modifie l'emprunt dans une même transaction, la ligne étant verrouillée (`SELECT … FOR UPDATE`) pendant la vérification de l'ordre des dates.
 - `POST /api/emprunts/:id/retour` marque l'emprunt rendu et l'ouvrage de nouveau disponible, dans une transaction. Un emprunt déjà rendu renvoie 409.
-- Supprimer un ouvrage emprunté renvoie 409. Un ouvrage qui garde un historique d'emprunts est aussi protégé (clé étrangère `RESTRICT`, erreur Prisma P2003 → 409).
+- `DELETE /api/ouvrages/:id` (204) retire un ouvrage du catalogue :
+  - emprunté : **409** ;
+  - jamais emprunté : supprimé définitivement ;
+  - avec un historique d'emprunts : **archivé** (colonne `archive_le`). Il disparaît des listes et du détail (404), ne peut plus être emprunté ni modifié, mais ses emprunts passés restent consultables avec son titre. La clé étrangère `RESTRICT` reste en place : aucun historique ne peut être effacé par erreur.
 - Supprimer un emprunt en cours libère l'ouvrage.
 - `disponible` n'est pas modifiable par `POST` ou `PATCH` : ce champ suit les emprunts.
 
@@ -233,7 +237,7 @@ cp .env.test.example .env.test   # renseigner DATABASE_URL (base *_test) et deux
 npm test                         # applique les migrations sur la base de test puis lance les tests
 ```
 
-Ils couvrent l'inscription (doublon, rôle imposé), la connexion réussie et échouée, le rafraîchissement avec rotation, la déconnexion, les 401 et 403, la propriété des emprunts, les en-têtes helmet, CORS, la limite de taille des corps et le 429 à la onzième tentative.
+Ils couvrent l'inscription (doublon, rôle imposé), la connexion réussie et échouée, le rafraîchissement avec rotation, la déconnexion, les 401 et 403, la propriété des emprunts, la suppression et l'archivage des ouvrages, les en-têtes helmet, CORS, la limite de taille des corps et le 429 à la onzième tentative.
 
 La CI (`.github/workflows/ci.yml`) exécute `npm ci`, `npm audit --audit-level=high` et `npm test` à chaque pull request, avec un service PostgreSQL jetable et des secrets JWT générés pour l'exécution.
 

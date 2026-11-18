@@ -58,12 +58,16 @@ export async function creer({ ouvrageId, emprunteurId, dateEmprunt = new Date(),
     const emprunteur = await tx.utilisateur.findUnique({ where: { id: emprunteurId }, select: { id: true } });
     if (!emprunteur) throw new NonTrouve(`Utilisateur ${emprunteurId} introuvable`);
 
+    // Un ouvrage archivé ne fait plus partie du catalogue : il ne peut pas être emprunté (404).
     const { count } = await tx.ouvrage.updateMany({
-      where: { id: ouvrageId, disponible: true },
+      where: { id: ouvrageId, disponible: true, archiveLe: null },
       data: { disponible: false },
     });
     if (count === 0) {
-      const existe = await tx.ouvrage.findUnique({ where: { id: ouvrageId }, select: { id: true } });
+      const existe = await tx.ouvrage.findFirst({
+        where: { id: ouvrageId, archiveLe: null },
+        select: { id: true },
+      });
       if (!existe) throw new NonTrouve(`Ouvrage ${ouvrageId} introuvable`);
       throw new Conflit(`Ouvrage ${ouvrageId} indisponible : il est déjà emprunté`);
     }

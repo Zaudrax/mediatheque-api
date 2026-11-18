@@ -13,6 +13,9 @@ model Ouvrage {
   auteur     String    @db.VarChar(120)
   annee      Int
   disponible Boolean   @default(true)
+  /// Archivage logique : un ouvrage qui a un historique d'emprunts n'est pas supprimé
+  /// mais archivé ; il disparaît du catalogue et son historique est conservé.
+  archiveLe  DateTime? @map("archive_le")
   creeLe     DateTime  @default(now()) @map("cree_le")
   modifieLe  DateTime  @updatedAt @map("modifie_le")
   emprunts   Emprunt[]
@@ -59,12 +62,12 @@ model Emprunt {
   ouvrage          Ouvrage     @relation(fields: [ouvrageId], references: [id], onDelete: Restrict)
   emprunteurId     Int         @map("emprunteur_id")
   emprunteur       Utilisateur @relation(fields: [emprunteurId], references: [id], onDelete: Restrict)
-  dateEmprunt      DateTime  @map("date_emprunt")
-  dateRetourPrevue DateTime  @map("date_retour_prevue")
-  rendu            Boolean   @default(false)
-  renduLe          DateTime? @map("rendu_le")
-  creeLe           DateTime  @default(now()) @map("cree_le")
-  modifieLe        DateTime  @updatedAt @map("modifie_le")
+  dateEmprunt      DateTime    @map("date_emprunt")
+  dateRetourPrevue DateTime    @map("date_retour_prevue")
+  rendu            Boolean     @default(false)
+  renduLe          DateTime?   @map("rendu_le")
+  creeLe           DateTime    @default(now()) @map("cree_le")
+  modifieLe        DateTime    @updatedAt @map("modifie_le")
 
   @@index([ouvrageId])
   @@index([emprunteurId])

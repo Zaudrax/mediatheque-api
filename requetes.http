@@ -232,8 +232,16 @@ Content-Type: {{json}}
 DELETE {{base}}/api/ouvrages/1
 Authorization: Bearer {{biblio}}
 
-### Erreur : supprimer un ouvrage ayant un historique d'emprunts (409, P2003)
+### Archiver un ouvrage ayant un historique d'emprunts (204) — retiré du catalogue, historique conservé
 DELETE {{base}}/api/ouvrages/2
+Authorization: Bearer {{biblio}}
+
+### Erreur : l'ouvrage archivé n'est plus au catalogue (404)
+GET {{base}}/api/ouvrages/2
+Authorization: Bearer {{biblio}}
+
+### L'historique reste consultable : l'emprunt 3 affiche toujours « Madame Bovary » (200)
+GET {{base}}/api/emprunts/3
 Authorization: Bearer {{biblio}}
 
 ### Supprimer un ouvrage sans emprunt (204)
