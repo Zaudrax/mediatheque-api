@@ -1,12 +1,143 @@
 ### Requêtes de test — extension VS Code « REST Client »
 ### Lancer d'abord : npm run seed, puis npm run dev.
-### Les identifiants supposent un seed fraîchement rejoué (ouvrages 1 à 10, emprunts 1 à 3).
+### Exécuter les requêtes dans l'ordre : les jetons sont récupérés à la connexion.
+### /api/auth/* est limité à 10 requêtes par quart d'heure : le fichier en contient 10, puis une
+### onzième qui montre le 429. Pour le rejouer, redémarrer l'API (compteur en mémoire).
+### Données du seed : ouvrages 1 à 10 ; emprunt 1 (Camille, ouvrage 1, en cours),
+### emprunt 2 (Léon, ouvrage 4, en cours), emprunt 3 (Camille, ouvrage 2, rendu).
 
 @base = http://localhost:3000
 @json = application/json
 
-### Santé de l'API (200)
+### Santé de l'API (200, publique)
 GET {{base}}/sante
+
+# =====================================================================
+# AUTHENTIFICATION
+# =====================================================================
+
+### Inscription d'un membre (201) — le champ « role » est ignoré
+POST {{base}}/api/auth/inscription
+Content-Type: {{json}}
+
+{
+  "email": "zoe@example.net",
+  "motDePasse": "Zoe-Demo-2026-mdp",
+  "role": "bibliothecaire"
+}
+
+### Erreur : e-mail déjà inscrit (409)
+POST {{base}}/api/auth/inscription
+Content-Type: {{json}}
+
+{
+  "email": "camille@example.net",
+  "motDePasse": "Un-autre-mot-de-passe"
+}
+
+### Connexion bibliothécaire (200)
+# @name connexionBiblio
+POST {{base}}/api/auth/connexion
+Content-Type: {{json}}
+
+{
+  "email": "bibliothecaire@example.net",
+  "motDePasse": "Biblio-Demo-2026!"
+}
+
+### Connexion membre Camille (200)
+# @name connexionCamille
+POST {{base}}/api/auth/connexion
+Content-Type: {{json}}
+
+{
+  "email": "camille@example.net",
+  "motDePasse": "Membre-Demo-2026!"
+}
+
+### Erreur : mauvais mot de passe (401)
+POST {{base}}/api/auth/connexion
+Content-Type: {{json}}
+
+{
+  "email": "camille@example.net",
+  "motDePasse": "pas-le-bon"
+}
+
+### Erreur : compte inexistant — même 401 et même message (401)
+POST {{base}}/api/auth/connexion
+Content-Type: {{json}}
+
+{
+  "email": "personne@example.net",
+  "motDePasse": "pas-le-bon"
+}
+
+@biblio = {{connexionBiblio.response.body.accessToken}}
+@camille = {{connexionCamille.response.body.accessToken}}
+
+### Rafraîchir les jetons de Camille (200) — rotation du refresh token
+# @name rafraichissement
+POST {{base}}/api/auth/rafraichir
+Content-Type: {{json}}
+
+{
+  "refreshToken": "{{connexionCamille.response.body.refreshToken}}"
+}
+
+### Erreur : rejouer l'ancien refresh token (401, tous les jetons du compte sont révoqués)
+POST {{base}}/api/auth/rafraichir
+Content-Type: {{json}}
+
+{
+  "refreshToken": "{{connexionCamille.response.body.refreshToken}}"
+}
+
+### Erreur : refresh token falsifié (401)
+POST {{base}}/api/auth/rafraichir
+Content-Type: {{json}}
+
+{
+  "refreshToken": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.signature"
+}
+
+# =====================================================================
+# AUTORISATION
+# =====================================================================
+
+### Erreur : sans jeton (401)
+GET {{base}}/api/ouvrages
+
+### Erreur : jeton invalide (401)
+GET {{base}}/api/ouvrages
+Authorization: Bearer jeton.invalide.signature
+
+### Erreur : un membre ne peut pas créer d'ouvrage (403)
+POST {{base}}/api/ouvrages
+Authorization: Bearer {{camille}}
+Content-Type: {{json}}
+
+{
+  "titre": "Nana",
+  "auteur": "Émile Zola",
+  "annee": 1880
+}
+
+### Erreur : un membre ne voit pas l'emprunt de Léon (404)
+GET {{base}}/api/emprunts/2
+Authorization: Bearer {{camille}}
+
+### Erreur : un membre ne clôture pas l'emprunt de Léon (404)
+POST {{base}}/api/emprunts/2/retour
+Authorization: Bearer {{camille}}
+
+### Un membre ne liste que ses emprunts, même en filtrant sur Léon (200)
+GET {{base}}/api/emprunts?emprunteurId=3
+Authorization: Bearer {{camille}}
+
+### Erreur : un membre ne supprime pas d'emprunt (403)
+DELETE {{base}}/api/emprunts/1
+Authorization: Bearer {{camille}}
 
 # =====================================================================
 # OUVRAGES
@@ -14,34 +145,44 @@ GET {{base}}/sante
 
 ### Lister (200, pagination par défaut : page 1, limite 10)
 GET {{base}}/api/ouvrages
+Authorization: Bearer {{camille}}
 
 ### Lister page 2, 3 par page (200)
 GET {{base}}/api/ouvrages?page=2&limite=3
+Authorization: Bearer {{camille}}
 
 ### Filtrer les ouvrages disponibles (200)
 GET {{base}}/api/ouvrages?disponible=true
-
-### Filtrer les ouvrages empruntés (200)
-GET {{base}}/api/ouvrages?disponible=false
+Authorization: Bearer {{camille}}
 
 ### Limite plafonnée à 50 (200, pagination.limite = 50)
 GET {{base}}/api/ouvrages?limite=500
+Authorization: Bearer {{camille}}
 
 ### Erreur : query string invalide (400)
 GET {{base}}/api/ouvrages?page=0&disponible=oui
+Authorization: Bearer {{camille}}
 
-### Détail avec les emprunts en cours (200)
-GET {{base}}/api/ouvrages/1
+### Détail avec les emprunts en cours (200) — le bibliothécaire voit tous les emprunts
+GET {{base}}/api/ouvrages/4
+Authorization: Bearer {{biblio}}
+
+### Détail vu par Camille (200) — l'emprunt de Léon n'apparaît pas
+GET {{base}}/api/ouvrages/4
+Authorization: Bearer {{camille}}
 
 ### Erreur : identifiant mal formé (400)
 GET {{base}}/api/ouvrages/abc
+Authorization: Bearer {{camille}}
 
 ### Erreur : identifiant inconnu (404)
 GET {{base}}/api/ouvrages/9999
+Authorization: Bearer {{camille}}
 
 ### Créer un ouvrage (201) — « isbn » et « disponible » sont ignorés
 # @name nouvelOuvrage
 POST {{base}}/api/ouvrages
+Authorization: Bearer {{biblio}}
 Content-Type: {{json}}
 
 {
@@ -54,6 +195,7 @@ Content-Type: {{json}}
 
 ### Erreur : corps invalide, liste des champs fautifs (400)
 POST {{base}}/api/ouvrages
+Authorization: Bearer {{biblio}}
 Content-Type: {{json}}
 
 {
@@ -61,38 +203,25 @@ Content-Type: {{json}}
   "annee": 3000
 }
 
-### Erreur : année antérieure à 1450 (400)
-POST {{base}}/api/ouvrages
-Content-Type: {{json}}
-
-{
-  "titre": "Manuscrit",
-  "auteur": "Anonyme",
-  "annee": 1200
-}
-
 ### Erreur : JSON mal formé (400)
 POST {{base}}/api/ouvrages
+Authorization: Bearer {{biblio}}
 Content-Type: {{json}}
 
 { "titre":
 
 ### Modifier partiellement (200)
 PATCH {{base}}/api/ouvrages/{{nouvelOuvrage.response.body.id}}
+Authorization: Bearer {{biblio}}
 Content-Type: {{json}}
 
 {
   "annee": 1881
 }
 
-### Erreur : PATCH sans aucun champ modifiable (400)
-PATCH {{base}}/api/ouvrages/{{nouvelOuvrage.response.body.id}}
-Content-Type: {{json}}
-
-{}
-
 ### Erreur : PATCH sur un ouvrage inconnu (404, P2025)
 PATCH {{base}}/api/ouvrages/9999
+Authorization: Bearer {{biblio}}
 Content-Type: {{json}}
 
 {
@@ -101,139 +230,172 @@ Content-Type: {{json}}
 
 ### Erreur : supprimer un ouvrage emprunté (409)
 DELETE {{base}}/api/ouvrages/1
+Authorization: Bearer {{biblio}}
 
 ### Erreur : supprimer un ouvrage ayant un historique d'emprunts (409, P2003)
 DELETE {{base}}/api/ouvrages/2
+Authorization: Bearer {{biblio}}
 
 ### Supprimer un ouvrage sans emprunt (204)
 DELETE {{base}}/api/ouvrages/{{nouvelOuvrage.response.body.id}}
-
-### Erreur : supprimer un ouvrage inconnu (404)
-DELETE {{base}}/api/ouvrages/9999
+Authorization: Bearer {{biblio}}
 
 # =====================================================================
 # EMPRUNTS
 # =====================================================================
 
-### Lister (200)
+### Camille liste ses emprunts (200)
 GET {{base}}/api/emprunts
+Authorization: Bearer {{camille}}
 
-### Filtrer les emprunts en cours (200)
+### Le bibliothécaire liste tous les emprunts en cours (200)
 GET {{base}}/api/emprunts?rendu=false
+Authorization: Bearer {{biblio}}
 
-### Filtrer les emprunts rendus, 1 par page (200)
-GET {{base}}/api/emprunts?rendu=true&page=1&limite=1
+### Le bibliothécaire filtre par emprunteur (200)
+GET {{base}}/api/emprunts?emprunteurId=3
+Authorization: Bearer {{biblio}}
 
 ### Erreur : filtre invalide (400)
 GET {{base}}/api/emprunts?rendu=peut-etre&limite=-3
+Authorization: Bearer {{camille}}
 
-### Détail (200)
+### Détail de son emprunt (200)
 GET {{base}}/api/emprunts/1
+Authorization: Bearer {{camille}}
 
-### Erreur : identifiant mal formé (400)
-GET {{base}}/api/emprunts/1.5
-
-### Erreur : identifiant inconnu (404)
-GET {{base}}/api/emprunts/9999
-
-### Emprunter l'ouvrage 3 (201) — l'ouvrage devient indisponible dans la même transaction
+### Camille emprunte l'ouvrage 3 (201) — pour elle-même, même si emprunteurId vaut 3
 # @name nouvelEmprunt
 POST {{base}}/api/emprunts
+Authorization: Bearer {{camille}}
 Content-Type: {{json}}
 
 {
   "ouvrageId": 3,
-  "emprunteur": "Zoé",
-  "dateEmprunt": "2026-11-16",
+  "emprunteurId": 3,
   "dateRetourPrevue": "2026-12-07"
 }
 
-### Vérifier : l'ouvrage 3 est indisponible et liste l'emprunt en cours (200)
-GET {{base}}/api/ouvrages/3
-
-### Erreur : emprunter un ouvrage déjà emprunté (409, rien n'est écrit)
+### Le bibliothécaire emprunte l'ouvrage 5 au nom de Léon (201)
 POST {{base}}/api/emprunts
-Content-Type: {{json}}
-
-{
-  "ouvrageId": 3,
-  "emprunteur": "Hugo",
-  "dateRetourPrevue": "2026-12-07"
-}
-
-### Erreur : emprunter un ouvrage inconnu (404)
-POST {{base}}/api/emprunts
-Content-Type: {{json}}
-
-{
-  "ouvrageId": 9999,
-  "emprunteur": "Hugo",
-  "dateRetourPrevue": "2026-12-07"
-}
-
-### Erreur : nom trop court et date non ISO (400)
-POST {{base}}/api/emprunts
+Authorization: Bearer {{biblio}}
 Content-Type: {{json}}
 
 {
   "ouvrageId": 5,
-  "emprunteur": "H",
+  "emprunteurId": 3,
+  "dateRetourPrevue": "2026-12-07"
+}
+
+### Erreur : ouvrage déjà emprunté (409, rien n'est écrit)
+POST {{base}}/api/emprunts
+Authorization: Bearer {{biblio}}
+Content-Type: {{json}}
+
+{
+  "ouvrageId": 3,
+  "dateRetourPrevue": "2026-12-07"
+}
+
+### Erreur : ouvrage inconnu (404)
+POST {{base}}/api/emprunts
+Authorization: Bearer {{camille}}
+Content-Type: {{json}}
+
+{
+  "ouvrageId": 9999,
+  "dateRetourPrevue": "2026-12-07"
+}
+
+### Erreur : date non ISO (400)
+POST {{base}}/api/emprunts
+Authorization: Bearer {{camille}}
+Content-Type: {{json}}
+
+{
+  "ouvrageId": 6,
   "dateRetourPrevue": "07/12/2026"
 }
 
 ### Erreur : retour prévu avant la date d'emprunt (400)
 POST {{base}}/api/emprunts
+Authorization: Bearer {{camille}}
 Content-Type: {{json}}
 
 {
-  "ouvrageId": 5,
-  "emprunteur": "Hugo",
+  "ouvrageId": 6,
   "dateEmprunt": "2026-12-10",
   "dateRetourPrevue": "2026-12-01"
 }
 
-### Modifier la date de retour prévue (200)
+### Modifier la date de retour (200) — emprunteurId est ignoré : le propriétaire ne change pas
 PATCH {{base}}/api/emprunts/{{nouvelEmprunt.response.body.id}}
+Authorization: Bearer {{camille}}
 Content-Type: {{json}}
 
 {
+  "emprunteurId": 3,
   "dateRetourPrevue": "2026-12-20T18:00:00Z"
 }
 
-### Erreur : PATCH avec un nom trop long (400)
+### Erreur : PATCH sans champ modifiable (400)
 PATCH {{base}}/api/emprunts/{{nouvelEmprunt.response.body.id}}
+Authorization: Bearer {{camille}}
 Content-Type: {{json}}
 
 {
-  "emprunteur": "Nom beaucoup trop long pour un emprunteur fictif, au-delà des quatre-vingts caractères autorisés"
+  "emprunteurId": 3
 }
 
-### Erreur : PATCH sur un emprunt inconnu (404)
-PATCH {{base}}/api/emprunts/9999
-Content-Type: {{json}}
-
-{
-  "emprunteur": "Hugo"
-}
-
-### Marquer l'emprunt rendu (200) — l'ouvrage redevient disponible
+### Camille rend son emprunt (200) — l'ouvrage redevient disponible
 POST {{base}}/api/emprunts/{{nouvelEmprunt.response.body.id}}/retour
+Authorization: Bearer {{camille}}
 
 ### Erreur : emprunt déjà rendu (409)
 POST {{base}}/api/emprunts/{{nouvelEmprunt.response.body.id}}/retour
+Authorization: Bearer {{camille}}
+
+### Le bibliothécaire clôture l'emprunt de Léon (200)
+POST {{base}}/api/emprunts/2/retour
+Authorization: Bearer {{biblio}}
 
 ### Erreur : retour d'un emprunt inconnu (404)
 POST {{base}}/api/emprunts/9999/retour
+Authorization: Bearer {{biblio}}
 
-### Supprimer un emprunt (204) — s'il était en cours, l'ouvrage est libéré
+### Le bibliothécaire supprime un emprunt (204)
 DELETE {{base}}/api/emprunts/{{nouvelEmprunt.response.body.id}}
+Authorization: Bearer {{biblio}}
 
 ### Erreur : supprimer un emprunt inconnu (404)
 DELETE {{base}}/api/emprunts/9999
+Authorization: Bearer {{biblio}}
 
 # =====================================================================
-# DIVERS
+# DURCISSEMENT ET DIVERS
 # =====================================================================
+
+### Erreur : origine non déclarée dans CORS_ORIGINS (403)
+GET {{base}}/sante
+Origin: https://site-inconnu.example
+
+### Origine autorisée (200, en-tête Access-Control-Allow-Origin)
+GET {{base}}/sante
+Origin: http://localhost:5173
 
 ### Erreur : route inconnue (404)
 GET {{base}}/api/auteurs
+Authorization: Bearer {{camille}}
+
+### Déconnexion de Camille (204) — révoque ses refresh tokens
+POST {{base}}/api/auth/deconnexion
+Authorization: Bearer {{rafraichissement.response.body.accessToken}}
+
+### Limitation : relancer plus de 10 fois une requête /api/auth en 15 minutes → 429
+POST {{base}}/api/auth/connexion
+Content-Type: {{json}}
+
+{
+  "email": "camille@example.net",
+  "motDePasse": "pas-le-bon"
+}
