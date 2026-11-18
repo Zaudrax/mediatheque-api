@@ -74,13 +74,22 @@ export async function creer({ ouvrageId, emprunteurId, dateEmprunt = new Date(),
   });
 }
 
+/**
+ * Lecture et mise à jour dans la même transaction : la ligne est verrouillée
+ * (SELECT … FOR UPDATE) le temps de vérifier l'ordre des dates, pour qu'une modification
+ * concurrente ne puisse pas s'intercaler entre la lecture et l'écriture.
+ */
 export async function modifier(id, donnees, portee = {}) {
-  const actuel = await trouver(id, portee);
-  verifierOrdreDates(
-    donnees.dateEmprunt ?? actuel.dateEmprunt,
-    donnees.dateRetourPrevue ?? actuel.dateRetourPrevue,
-  );
-  return prisma.emprunt.update({ where: { id }, data: donnees, include: inclure });
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM emprunts WHERE id = ${id} FOR UPDATE`;
+    const actuel = await tx.emprunt.findFirst({ where: { id, ...portee } });
+    if (!actuel) throw new NonTrouve(`Emprunt ${id} introuvable`);
+    verifierOrdreDates(
+      donnees.dateEmprunt ?? actuel.dateEmprunt,
+      donnees.dateRetourPrevue ?? actuel.dateRetourPrevue,
+    );
+    return tx.emprunt.update({ where: { id }, data: donnees, include: inclure });
+  });
 }
 
 /** Marque l'emprunt rendu et l'ouvrage de nouveau disponible, atomiquement. */
