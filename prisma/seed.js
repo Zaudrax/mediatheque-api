@@ -1,9 +1,14 @@
 /**
- * Seeder rejouable : vide les deux tables et remet les compteurs d'identifiants à zéro,
- * puis insère 10 ouvrages et 3 emprunts (dont un rendu). Relancé, il produit toujours
- * le même jeu de données, sans doublon. Les emprunteurs sont des prénoms fictifs.
+ * Seeder rejouable : vide les tables et remet les compteurs d'identifiants à zéro,
+ * puis insère 3 comptes, 10 ouvrages et 3 emprunts (dont un rendu). Relancé, il produit
+ * toujours le même jeu de données, sans doublon.
+ * Comptes fictifs en @example.net ; mots de passe de démonstration documentés dans le README.
  */
 import { prisma } from "../src/db.js";
+import { hacherMotDePasse } from "../src/services/auth.js";
+
+const MOT_DE_PASSE_BIBLIOTHECAIRE = "Biblio-Demo-2026!";
+const MOT_DE_PASSE_MEMBRE = "Membre-Demo-2026!";
 
 const ouvrages = [
   { titre: "Les Misérables", auteur: "Victor Hugo", annee: 1862 },
@@ -21,18 +26,33 @@ const ouvrages = [
 const jour = (decalage) => new Date(Date.now() + decalage * 24 * 60 * 60 * 1000);
 
 async function main() {
+  // Hachages calculés hors transaction (bcrypt, coût 12, prend quelques centaines de ms).
+  const [hacheBiblio, hacheMembre] = await Promise.all([
+    hacherMotDePasse(MOT_DE_PASSE_BIBLIOTHECAIRE),
+    hacherMotDePasse(MOT_DE_PASSE_MEMBRE),
+  ]);
+
   await prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`TRUNCATE TABLE emprunts, ouvrages RESTART IDENTITY CASCADE`;
+    await tx.$executeRaw`TRUNCATE TABLE refresh_tokens, emprunts, ouvrages, utilisateurs RESTART IDENTITY CASCADE`;
+
+    // Identifiants 1, 2 et 3 dans cet ordre.
+    await tx.utilisateur.createMany({
+      data: [
+        { email: "bibliothecaire@example.net", motDePasseHache: hacheBiblio, role: "bibliothecaire" },
+        { email: "camille@example.net", motDePasseHache: hacheMembre, role: "membre" },
+        { email: "leon@example.net", motDePasseHache: hacheMembre, role: "membre" },
+      ],
+    });
     await tx.ouvrage.createMany({ data: ouvrages });
 
     // Deux emprunts en cours : les ouvrages 1 et 4 deviennent indisponibles.
     await tx.emprunt.createMany({
       data: [
-        { ouvrageId: 1, emprunteur: "Camille", dateEmprunt: jour(-5), dateRetourPrevue: jour(16) },
-        { ouvrageId: 4, emprunteur: "Léon", dateEmprunt: jour(-2), dateRetourPrevue: jour(19) },
+        { ouvrageId: 1, emprunteurId: 2, dateEmprunt: jour(-5), dateRetourPrevue: jour(16) },
+        { ouvrageId: 4, emprunteurId: 3, dateEmprunt: jour(-2), dateRetourPrevue: jour(19) },
         {
           ouvrageId: 2,
-          emprunteur: "Inès",
+          emprunteurId: 2,
           dateEmprunt: jour(-30),
           dateRetourPrevue: jour(-9),
           rendu: true,
@@ -43,8 +63,14 @@ async function main() {
     await tx.ouvrage.updateMany({ where: { id: { in: [1, 4] } }, data: { disponible: false } });
   });
 
-  const [nbOuvrages, nbEmprunts] = await Promise.all([prisma.ouvrage.count(), prisma.emprunt.count()]);
-  console.log(`Seed terminé : ${nbOuvrages} ouvrages, ${nbEmprunts} emprunts.`);
+  const [nbUtilisateurs, nbOuvrages, nbEmprunts] = await Promise.all([
+    prisma.utilisateur.count(),
+    prisma.ouvrage.count(),
+    prisma.emprunt.count(),
+  ]);
+  console.log(
+    `Seed terminé : ${nbUtilisateurs} utilisateurs, ${nbOuvrages} ouvrages, ${nbEmprunts} emprunts.`,
+  );
 }
 
 try {
