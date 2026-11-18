@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: mediatheque
+          POSTGRES_DB: mediatheque_test
+          # Base jetable, accessible uniquement depuis le job : aucun mot de passe à stocker.
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U mediatheque -d mediatheque_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://mediatheque@localhost:5432/mediatheque_test?schema=public
+      CORS_ORIGINS: http://localhost:5173
+      LIMITE_AUTH_MAX: "1000"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Installation
+        run: npm ci
+
+      - name: Audit des dépendances
+        run: npm audit --audit-level=high
+
+      - name: Secrets JWT éphémères
+        run: |
+          echo "JWT_ACCESS_SECRET=$(openssl rand -base64 48)" >> "$GITHUB_ENV"
+          echo "JWT_REFRESH_SECRET=$(openssl rand -base64 48)" >> "$GITHUB_ENV"
+
+      - name: Tests
+        run: npm test
