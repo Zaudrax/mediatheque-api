@@ -3,9 +3,17 @@
  * puis insère 3 comptes, 10 ouvrages et 3 emprunts (dont un rendu). Relancé, il produit
  * toujours le même jeu de données, sans doublon.
  * Comptes fictifs en @example.net ; mots de passe de démonstration documentés dans le README.
+ *
+ * Garde-fou : le seeder VIDE toutes les tables. Il refuse de tourner quand NODE_ENV=production.
  */
-import { prisma } from "../src/db.js";
-import { hacherMotDePasse } from "../src/services/auth.js";
+if (process.env.NODE_ENV === "production") {
+  console.error("Seed refusé : NODE_ENV=production. Le seeder vide toutes les tables (TRUNCATE).");
+  process.exit(1);
+}
+
+// Imports dynamiques : rien n'est chargé (ni connexion ouverte) si le garde-fou refuse.
+const { prisma } = await import("../src/db.js");
+const { hacherMotDePasse } = await import("../src/services/auth.js");
 
 const MOT_DE_PASSE_BIBLIOTHECAIRE = "Biblio-Demo-2026!";
 const MOT_DE_PASSE_MEMBRE = "Membre-Demo-2026!";
