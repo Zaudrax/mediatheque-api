@@ -51,6 +51,8 @@ describe("Documentation OpenAPI", () => {
       "post /api/reservations",
       "get /api/reservations/{id}",
       "delete /api/reservations/{id}",
+      "post /api/assistant/flux",
+      "delete /api/assistant/memoire",
     ];
     const documentees = Object.entries(corps.paths as Record<string, Record<string, unknown>>).flatMap(
       ([chemin, operations]) => METHODES.filter((m) => m in operations).map((m) => `${m} ${chemin}`),

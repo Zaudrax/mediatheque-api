@@ -12,7 +12,7 @@ const serveur = app.listen(config.port, (err) => {
     process.exit(1);
   }
   console.log(
-    `API médiathèque à l'écoute sur http://localhost:${config.port} (documentation : /api/docs)`,
+    `API médiathèque à l'écoute sur http://localhost:${config.port} (assistant : ${config.ia.fournisseur}, documentation : /api/docs)`,
   );
 });
 

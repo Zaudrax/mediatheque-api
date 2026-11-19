@@ -1,12 +1,15 @@
 /**
  * Outils communs aux tests : démarrage de l'application sur un port éphémère,
  * remise à zéro de la base de test et connexion des comptes de test.
+ * L'assistant utilise toujours le fournisseur bouchon : aucun test ne dépend d'un service payant.
  */
 import type { AddressInfo } from "node:net";
 import { creerApp } from "../src/app.ts";
 import { type Config, lireConfig } from "../src/config.ts";
 import { prisma } from "../src/db.ts";
 import { hacherMotDePasse } from "../src/services/auth.ts";
+import { creerAssistant } from "../src/services/assistant/index.ts";
+import { creerFournisseurBouchon } from "../src/services/assistant/bouchon.ts";
 
 // Garde-fou : les tests vident la base, ils refusent de tourner ailleurs que sur une base de test.
 if (process.env.NODE_ENV !== "test" || !/_test\b/.test(process.env.DATABASE_URL ?? "")) {
@@ -70,7 +73,8 @@ export interface ApiDeTest {
  */
 export async function demarrer(surcharge: Partial<Config> = {}): Promise<ApiDeTest> {
   const config: Config = { ...lireConfig(), ...surcharge };
-  const serveur = creerApp(config).listen(0);
+  const assistant = creerAssistant(config.ia, creerFournisseurBouchon({ delaiMs: 1 }));
+  const serveur = creerApp(config, { assistant }).listen(0);
   await new Promise<void>((resolve) => serveur.once("listening", () => resolve()));
   const { port } = serveur.address() as AddressInfo;
   return {

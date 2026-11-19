@@ -38,6 +38,23 @@ export async function trouver(id: number, portee: PorteeEmprunts = {}) {
   return ouvrage;
 }
 
+/** Recherche dans le catalogue par titre ou auteur, insensible à la casse (outil de l'assistant). */
+export function rechercher({ requete, disponible }: { requete: string; disponible?: boolean | undefined }) {
+  return prisma.ouvrage.findMany({
+    where: {
+      OR: [
+        { titre: { contains: requete, mode: "insensitive" } },
+        { auteur: { contains: requete, mode: "insensitive" } },
+      ],
+      ...auCatalogue,
+      ...(disponible !== undefined && { disponible }),
+    },
+    select: { id: true, titre: true, auteur: true, annee: true, disponible: true },
+    orderBy: { titre: "asc" },
+    take: 10,
+  });
+}
+
 export function creer(donnees: CreerOuvrage) {
   return prisma.ouvrage.create({ data: donnees, omit: omettre });
 }

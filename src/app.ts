@@ -6,18 +6,27 @@ import { gestionErreurs } from "./middlewares/gestionErreurs.ts";
 import { journal } from "./middlewares/journal.ts";
 import { routeInconnue } from "./middlewares/routeInconnue.ts";
 import { corsRestreint, entetesSecurite, limiteurDebit } from "./middlewares/securite.ts";
+import { routeurAssistant } from "./routes/assistant.ts";
 import { routeurAuth } from "./routes/auth.ts";
 import { routeurDocs } from "./routes/docs.ts";
 import { routeurEmprunts } from "./routes/emprunts.ts";
 import { routeurOuvrages } from "./routes/ouvrages.ts";
 import { routeurReservations } from "./routes/reservations.ts";
+import { type Assistant, creerAssistant } from "./services/assistant/index.ts";
+
+export interface Dependances {
+  /** Permet aux tests d'injecter un assistant (bouchon plus rapide, par exemple). */
+  assistant?: Assistant;
+}
 
 /**
  * Construit l'application sans écouter de port : index.ts s'en charge, les tests aussi
- * (sur un port éphémère). Chaque appel crée ses propres compteurs de limitation de débit.
+ * (sur un port éphémère). Chaque appel crée ses propres compteurs de limitation de débit
+ * et sa propre mémoire de conversation.
  */
-export function creerApp(config: Config = lireConfig()): Express {
+export function creerApp(config: Config = lireConfig(), dependances: Dependances = {}): Express {
   const app = express();
+  const assistant = dependances.assistant ?? creerAssistant(config.ia);
   const authentifie = authentifier(config.jwt);
 
   app.disable("x-powered-by");
@@ -43,6 +52,7 @@ export function creerApp(config: Config = lireConfig()): Express {
   app.use("/api/ouvrages", authentifie, routeurOuvrages());
   app.use("/api/emprunts", authentifie, routeurEmprunts(config));
   app.use("/api/reservations", authentifie, routeurReservations());
+  app.use("/api/assistant", authentifie, routeurAssistant(config, assistant));
 
   app.use(routeInconnue);
   app.use(gestionErreurs);

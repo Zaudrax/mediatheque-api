@@ -19,10 +19,19 @@ const schemaConfig = z
     LIMITE_AUTH_FENETRE_MS: entier(15 * 60 * 1000),
     LIMITE_GENERALE_MAX: entier(300),
     LIMITE_GENERALE_FENETRE_MS: entier(60 * 1000),
+    LIMITE_ASSISTANT_MAX: entier(10),
     // Nombre de proxys de confiance devant l'API (0 en accès direct) : sert à lire la vraie IP.
     TRUST_PROXY: z.coerce.number().int().min(0).default(0),
     // Durée d'un emprunt créé automatiquement au retour d'un ouvrage réservé.
     DUREE_EMPRUNT_JOURS: entier(21),
+    IA_FOURNISSEUR: z.enum(["openai", "bouchon"]).default("bouchon"),
+    OPENAI_API_KEY: z.string().optional(),
+    OPENAI_MODELE: z.string().default("gpt-4.1-mini"),
+    IA_MAX_JETONS_SORTIE: entier(400),
+  })
+  .refine((c) => c.IA_FOURNISSEUR !== "openai" || Boolean(c.OPENAI_API_KEY), {
+    path: ["OPENAI_API_KEY"],
+    error: "est obligatoire quand IA_FOURNISSEUR=openai",
   });
 
 export interface Fenetre {
@@ -39,14 +48,22 @@ export interface ConfigJwt {
   audience: string;
 }
 
+export interface ConfigIa {
+  fournisseur: "openai" | "bouchon";
+  cleOpenai: string | undefined;
+  modele: string;
+  maxJetonsSortie: number;
+}
+
 export interface Config {
   env: "development" | "test" | "production";
   port: number;
   jwt: ConfigJwt;
   corsOrigins: string[];
-  limites: { auth: Fenetre; generale: Fenetre };
+  limites: { auth: Fenetre; generale: Fenetre; assistant: Fenetre };
   trustProxy: number;
   dureeEmpruntJours: number;
+  ia: ConfigIa;
 }
 
 /**
@@ -78,8 +95,15 @@ export function lireConfig(env: NodeJS.ProcessEnv = process.env): Config {
     limites: {
       auth: { max: c.LIMITE_AUTH_MAX, fenetreMs: c.LIMITE_AUTH_FENETRE_MS },
       generale: { max: c.LIMITE_GENERALE_MAX, fenetreMs: c.LIMITE_GENERALE_FENETRE_MS },
+      assistant: { max: c.LIMITE_ASSISTANT_MAX, fenetreMs: 60 * 1000 },
     },
     trustProxy: c.TRUST_PROXY,
     dureeEmpruntJours: c.DUREE_EMPRUNT_JOURS,
+    ia: {
+      fournisseur: c.IA_FOURNISSEUR,
+      cleOpenai: c.OPENAI_API_KEY,
+      modele: c.OPENAI_MODELE,
+      maxJetonsSortie: c.IA_MAX_JETONS_SORTIE,
+    },
   };
 }

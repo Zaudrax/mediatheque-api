@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { createDocument, type ZodOpenApiOperationObject, type ZodOpenApiResponsesObject } from "zod-openapi";
+import { question } from "../schemas/assistant.ts";
 import { connexion, inscription, Jetons, rafraichissement, UtilisateurPublic } from "../schemas/auth.ts";
 import { Erreur, listePaginee, paramsId } from "../schemas/commun.ts";
 import { creerEmprunt, Emprunt, listerEmprunts, modifierEmprunt } from "../schemas/emprunts.ts";
@@ -55,7 +56,7 @@ export function genererSpecification() {
       title: "API de la médiathèque",
       version: "1.0.0",
       description:
-        "Catalogue, emprunts et réservations de la médiathèque associative.\n\n" +
+        "Catalogue, emprunts, réservations et assistant de la médiathèque associative.\n\n" +
         "Authentification : `POST /api/auth/connexion` renvoie un access token (15 min) à envoyer " +
         "dans l'en-tête `Authorization: Bearer <jeton>`, et un refresh token à usage unique " +
         "pour `POST /api/auth/rafraichir`.\n\n" +
@@ -69,6 +70,7 @@ export function genererSpecification() {
       { name: "Ouvrages" },
       { name: "Emprunts" },
       { name: "Réservations" },
+      { name: "Assistant" },
     ],
     components: {
       securitySchemes: {
@@ -262,6 +264,46 @@ export function genererSpecification() {
           ...securise,
           requestParams: { path: paramsId },
           responses: reponses(sansContenu("Réservation annulée"), 400, 401, 404, 409),
+        }),
+      },
+
+      // ------------------------------------------------------------ Assistant
+      "/api/assistant/flux": {
+        post: op({
+          tags: ["Assistant"],
+          summary: "Poser une question à l'assistant (réponse en Server-Sent Events)",
+          description:
+            "Limité à 10 appels par minute et par utilisateur. Événements diffusés :\n\n" +
+            "- `event: outil` / `data: {\"nom\": \"rechercher_ouvrages\"}` : un outil est consulté ;\n" +
+            "- `data: {\"delta\": \"…\"}` : un morceau de la réponse ;\n" +
+            "- `event: fin` / `data: {\"jetons\": {\"entree\": 0, \"sortie\": 0}}` : fin de la réponse ;\n" +
+            "- `event: erreur` / `data: {\"message\": \"…\"}` : le fournisseur a échoué.\n\n" +
+            "Les outils n'accèdent qu'aux données de l'utilisateur connecté. Fermer la connexion interrompt la génération.",
+          ...securise,
+          requestBody: corps(question),
+          responses: reponses(
+            {
+              200: {
+                description: "Flux SSE",
+                content: {
+                  "text/event-stream": {
+                    schema: z.string().meta({ example: 'data: {"delta":"Bonjour "}\n\nevent: fin\ndata: {"jetons":{"entree":12,"sortie":30}}\n\n' }),
+                  },
+                },
+              },
+            },
+            400,
+            401,
+            429,
+          ),
+        }),
+      },
+      "/api/assistant/memoire": {
+        delete: op({
+          tags: ["Assistant"],
+          summary: "Effacer la conversation de l'utilisateur connecté",
+          ...securise,
+          responses: reponses(sansContenu("Conversation effacée"), 401),
         }),
       },
     },

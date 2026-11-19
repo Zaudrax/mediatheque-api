@@ -33,6 +33,7 @@ jobs:
       DATABASE_URL: postgresql://mediatheque@localhost:5432/mediatheque_test?schema=public
       CORS_ORIGINS: http://localhost:5173
       LIMITE_AUTH_MAX: "1000"
+      IA_FOURNISSEUR: bouchon
 
     steps:
       - uses: actions/checkout@v4

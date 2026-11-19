@@ -35,12 +35,16 @@ export function corsRestreint(originesAutorisees: string[]): RequestHandler {
  * Chaque appel crée un compteur indépendant, en mémoire.
  * Par défaut la clé est l'adresse IP ; `cle` permet de compter par utilisateur.
  */
-export function limiteurDebit({ max, fenetreMs }: Fenetre): RequestHandler {
+export function limiteurDebit(
+  { max, fenetreMs }: Fenetre,
+  cle?: (req: Parameters<RequestHandler>[0]) => string,
+): RequestHandler {
   return rateLimit({
     windowMs: fenetreMs,
     limit: max,
     standardHeaders: "draft-8",
     legacyHeaders: false,
+    ...(cle && { keyGenerator: cle }),
     handler: (_req, res) => {
       res.status(429).json({ erreur: "Trop de requêtes, réessayez plus tard" });
     },
