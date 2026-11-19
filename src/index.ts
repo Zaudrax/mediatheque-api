@@ -11,7 +11,9 @@ const serveur = app.listen(config.port, (err) => {
     console.error(`Impossible d'écouter sur le port ${config.port} : ${err.message}`);
     process.exit(1);
   }
-  console.log(`API médiathèque à l'écoute sur http://localhost:${config.port}`);
+  console.log(
+    `API médiathèque à l'écoute sur http://localhost:${config.port} (documentation : /api/docs)`,
+  );
 });
 
 function arreter(signal: NodeJS.Signals): void {

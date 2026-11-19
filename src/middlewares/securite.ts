@@ -5,7 +5,10 @@ import helmet from "helmet";
 import type { Fenetre } from "../config.ts";
 import { Interdit } from "../erreurs.ts";
 
-/** En-têtes de sécurité (helmet). */
+/**
+ * En-têtes de sécurité. La CSP par défaut de helmet convient à l'API comme à Swagger UI,
+ * dont les scripts et feuilles de style sont servis par l'API elle-même.
+ */
 export function entetesSecurite(): RequestHandler {
   return helmet();
 }
@@ -28,7 +31,10 @@ export function corsRestreint(originesAutorisees: string[]): RequestHandler {
   });
 }
 
-/** Chaque appel crée un compteur indépendant (en mémoire, par adresse IP). */
+/**
+ * Chaque appel crée un compteur indépendant, en mémoire.
+ * Par défaut la clé est l'adresse IP ; `cle` permet de compter par utilisateur.
+ */
 export function limiteurDebit({ max, fenetreMs }: Fenetre): RequestHandler {
   return rateLimit({
     windowMs: fenetreMs,

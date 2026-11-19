@@ -7,6 +7,7 @@ import { journal } from "./middlewares/journal.ts";
 import { routeInconnue } from "./middlewares/routeInconnue.ts";
 import { corsRestreint, entetesSecurite, limiteurDebit } from "./middlewares/securite.ts";
 import { routeurAuth } from "./routes/auth.ts";
+import { routeurDocs } from "./routes/docs.ts";
 import { routeurEmprunts } from "./routes/emprunts.ts";
 import { routeurOuvrages } from "./routes/ouvrages.ts";
 
@@ -36,6 +37,7 @@ export function creerApp(config: Config = lireConfig()): Express {
     }
   });
 
+  app.use("/api", routeurDocs());
   app.use("/api/auth", limiteurDebit(config.limites.auth), routeurAuth(config));
   app.use("/api/ouvrages", authentifie, routeurOuvrages());
   app.use("/api/emprunts", authentifie, routeurEmprunts());
