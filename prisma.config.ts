@@ -5,7 +5,7 @@ export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
     path: "prisma/migrations",
-    seed: "node prisma/seed.js",
+    seed: "node prisma/seed.ts",
   },
   datasource: {
     // process.env plutôt que env() : `prisma generate` (lancé par npm ci) doit

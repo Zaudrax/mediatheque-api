@@ -3,22 +3,23 @@
   "version": "1.0.0",
   "description": "API REST de gestion du catalogue et des emprunts d’une médiathèque associative (Express 5, Zod, Prisma 7, PostgreSQL)",
   "type": "module",
-  "main": "src/index.js",
+  "main": "src/index.ts",
   "engines": {
     "node": ">=24"
   },
   "scripts": {
-    "dev": "node --env-file-if-exists=.env --watch src/index.js",
-    "start": "node --env-file-if-exists=.env src/index.js",
+    "dev": "node --env-file-if-exists=.env --watch src/index.ts",
+    "start": "node --env-file-if-exists=.env src/index.ts",
+    "check": "tsc --noEmit",
     "db:up": "docker compose up -d --wait",
     "db:down": "docker compose down",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
-    "seed": "node --env-file-if-exists=.env prisma/seed.js",
+    "seed": "node --env-file-if-exists=.env prisma/seed.ts",
     "generate": "prisma generate",
     "postinstall": "prisma generate",
     "pretest": "node --env-file-if-exists=.env.test node_modules/prisma/build/index.js migrate deploy",
-    "test": "node --env-file-if-exists=.env.test --test --test-concurrency=1 \"test/**/*.test.js\""
+    "test": "node --env-file-if-exists=.env.test --test --test-concurrency=1 \"test/**/*.test.ts\""
   },
   "license": "ISC",
   "dependencies": {
@@ -35,6 +36,10 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "prisma": "^7.10.1"
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^24.19.2",
+    "prisma": "^7.10.1",
+    "typescript": "^7.0.2"
   }
 }

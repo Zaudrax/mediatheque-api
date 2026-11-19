@@ -48,6 +48,9 @@ jobs:
       - name: Audit des dépendances
         run: npm audit --audit-level=high
 
+      - name: Vérification des types (tsc --noEmit)
+        run: npm run check
+
       - name: Secrets JWT éphémères
         run: |
           echo "JWT_ACCESS_SECRET=$(openssl rand -base64 48)" >> "$GITHUB_ENV"
