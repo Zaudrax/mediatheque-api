@@ -1,4 +1,5 @@
 import { Router } from "express";
+import type { Config } from "../config.ts";
 import { estBibliothecaire, exigerRole, porteeEmprunts, utilisateurDe } from "../middlewares/authentifier.ts";
 import { valider } from "../middlewares/valider.ts";
 import * as emprunts from "../repositories/emprunts.ts";
@@ -11,7 +12,7 @@ import * as serviceEmprunts from "../services/emprunts.ts";
  * Un membre ne voit, ne crée, ne modifie et ne clôture que ses propres emprunts ;
  * un bibliothécaire accède à tous les emprunts et peut seul en supprimer.
  */
-export function routeurEmprunts(): Router {
+export function routeurEmprunts(config: Config): Router {
   const routeur = Router();
 
   routeur.get(
@@ -44,7 +45,7 @@ export function routeurEmprunts(): Router {
     "/:id/retour",
     valider({ params: paramsId }, async ({ params }, req, res) => {
       const portee = porteeEmprunts(utilisateurDe(req));
-      res.json(await serviceEmprunts.retourner(params.id, portee));
+      res.json(await serviceEmprunts.retourner(params.id, portee, config.dureeEmpruntJours));
     }),
   );
 
@@ -59,7 +60,7 @@ export function routeurEmprunts(): Router {
     "/:id",
     exigerRole("bibliothecaire"),
     valider({ params: paramsId }, async ({ params }, _req, res) => {
-      await serviceEmprunts.supprimer(params.id);
+      await serviceEmprunts.supprimer(params.id, config.dureeEmpruntJours);
       res.status(204).end();
     }),
   );

@@ -21,6 +21,8 @@ const schemaConfig = z
     LIMITE_GENERALE_FENETRE_MS: entier(60 * 1000),
     // Nombre de proxys de confiance devant l'API (0 en accès direct) : sert à lire la vraie IP.
     TRUST_PROXY: z.coerce.number().int().min(0).default(0),
+    // Durée d'un emprunt créé automatiquement au retour d'un ouvrage réservé.
+    DUREE_EMPRUNT_JOURS: entier(21),
   });
 
 export interface Fenetre {
@@ -44,6 +46,7 @@ export interface Config {
   corsOrigins: string[];
   limites: { auth: Fenetre; generale: Fenetre };
   trustProxy: number;
+  dureeEmpruntJours: number;
 }
 
 /**
@@ -77,5 +80,6 @@ export function lireConfig(env: NodeJS.ProcessEnv = process.env): Config {
       generale: { max: c.LIMITE_GENERALE_MAX, fenetreMs: c.LIMITE_GENERALE_FENETRE_MS },
     },
     trustProxy: c.TRUST_PROXY,
+    dureeEmpruntJours: c.DUREE_EMPRUNT_JOURS,
   };
 }

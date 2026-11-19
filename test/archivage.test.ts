@@ -37,7 +37,7 @@ describe("Suppression et archivage des ouvrages", () => {
     assert.equal((await supprimerOuvrage(1)).statut, 409);
   });
 
-  test("un ouvrage sans aucun emprunt est supprimé définitivement (204)", async () => {
+  test("un ouvrage sans aucun emprunt ni réservation est supprimé définitivement (204)", async () => {
     assert.equal((await supprimerOuvrage(3)).statut, 204);
     const lecture = await appeler(api.base, "/api/ouvrages/3", { jeton: jetons.bibliothecaire });
     assert.equal(lecture.statut, 404);
@@ -59,7 +59,7 @@ describe("Suppression et archivage des ouvrages", () => {
     assert.equal(historique.corps.ouvrage.titre, "Germinal");
   });
 
-  test("un ouvrage archivé ne peut être ni emprunté, ni modifié, ni archivé deux fois (404)", async () => {
+  test("un ouvrage archivé ne peut être ni emprunté, ni réservé, ni modifié, ni archivé deux fois (404)", async () => {
     await aliceRendGerminal();
     await supprimerOuvrage(1);
 
@@ -68,13 +68,38 @@ describe("Suppression et archivage des ouvrages", () => {
       jeton: jetons.alice,
       corps: { ouvrageId: 1, dateRetourPrevue: dansDeuxSemaines() },
     });
+    const reservation = await appeler(api.base, "/api/reservations", {
+      methode: "POST",
+      jeton: jetons.bruno,
+      corps: { ouvrageId: 1 },
+    });
     const modification = await appeler(api.base, "/api/ouvrages/1", {
       methode: "PATCH",
       jeton: jetons.bibliothecaire,
       corps: { annee: 1886 },
     });
     const secondeSuppression = await supprimerOuvrage(1);
-    assert.deepEqual([emprunt.statut, modification.statut, secondeSuppression.statut], [404, 404, 404]);
+    assert.deepEqual(
+      [emprunt.statut, reservation.statut, modification.statut, secondeSuppression.statut],
+      [404, 404, 404, 404],
+    );
   });
 
+  test("un historique fait uniquement de réservations suffit à archiver l'ouvrage", async () => {
+    // Bruno réserve « Germinal » puis annule ; l'emprunt d'Alice est ensuite supprimé :
+    // il ne reste qu'une réservation annulée, que la clé étrangère protège.
+    const { corps } = await appeler(api.base, "/api/reservations", {
+      methode: "POST",
+      jeton: jetons.bruno,
+      corps: { ouvrageId: 1 },
+    });
+    await appeler(api.base, `/api/reservations/${corps.id}`, { methode: "DELETE", jeton: jetons.bruno });
+    await appeler(api.base, "/api/emprunts/1", { methode: "DELETE", jeton: jetons.bibliothecaire });
+
+    assert.equal((await supprimerOuvrage(1)).statut, 204);
+    assert.equal((await appeler(api.base, "/api/ouvrages/1", { jeton: jetons.bruno })).statut, 404);
+    const historique = await appeler(api.base, `/api/reservations/${corps.id}`, { jeton: jetons.bruno });
+    assert.equal(historique.statut, 200);
+    assert.equal(historique.corps.statut, "annulee");
+  });
 });

@@ -81,9 +81,13 @@ export function compterEmpruntsEnCours(id: number, client: ClientDb) {
   return client.emprunt.count({ where: { ouvrageId: id, rendu: false } });
 }
 
-/** Nombre d'emprunts, passés ou en cours, qui référencent l'ouvrage. */
-export function compterHistorique(id: number, client: ClientDb): Promise<number> {
-  return client.emprunt.count({ where: { ouvrageId: id } });
+/** Nombre d'emprunts et de réservations, passés ou en cours, qui référencent l'ouvrage. */
+export async function compterHistorique(id: number, client: ClientDb): Promise<number> {
+  const [nbEmprunts, nbReservations] = await Promise.all([
+    client.emprunt.count({ where: { ouvrageId: id } }),
+    client.reservation.count({ where: { ouvrageId: id } }),
+  ]);
+  return nbEmprunts + nbReservations;
 }
 
 /** Suppression définitive : réservée à un ouvrage sans aucun historique. */
@@ -91,7 +95,7 @@ export function supprimer(id: number, client: ClientDb) {
   return client.ouvrage.delete({ where: { id } });
 }
 
-/** Archivage logique : l'ouvrage quitte le catalogue, ses emprunts restent. */
+/** Archivage logique : l'ouvrage quitte le catalogue, ses emprunts et réservations restent. */
 export function archiver(id: number, client: ClientDb) {
   return client.ouvrage.update({ where: { id }, data: { archiveLe: new Date() } });
 }

@@ -1,7 +1,7 @@
 /**
  * Seeder rejouable : vide les tables et remet les compteurs d'identifiants à zéro,
- * puis insère 3 comptes, 10 ouvrages et 3 emprunts (dont un rendu). Relancé, il produit
- * toujours le même jeu de données, sans doublon.
+ * puis insère 3 comptes, 10 ouvrages, 3 emprunts (dont un rendu) et 1 réservation.
+ * Relancé, il produit toujours le même jeu de données, sans doublon.
  * Comptes fictifs en @example.net ; mots de passe de démonstration documentés dans le README.
  *
  * Garde-fou : le seeder VIDE toutes les tables. Il refuse de tourner quand NODE_ENV=production.
@@ -41,7 +41,7 @@ async function main(): Promise<void> {
   ]);
 
   await prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`TRUNCATE TABLE refresh_tokens, emprunts, ouvrages, utilisateurs RESTART IDENTITY CASCADE`;
+    await tx.$executeRaw`TRUNCATE TABLE refresh_tokens, reservations, emprunts, ouvrages, utilisateurs RESTART IDENTITY CASCADE`;
 
     // Identifiants 1, 2 et 3 dans cet ordre.
     await tx.utilisateur.createMany({
@@ -69,15 +69,20 @@ async function main(): Promise<void> {
       ],
     });
     await tx.ouvrage.updateMany({ where: { id: { in: [1, 4] } }, data: { disponible: false } });
+
+    // Léon attend « Les Misérables », emprunté par Camille : au retour, il deviendra son emprunt.
+    await tx.reservation.create({ data: { ouvrageId: 1, membreId: 3 } });
   });
 
-  const [nbUtilisateurs, nbOuvrages, nbEmprunts] = await Promise.all([
+  const [nbUtilisateurs, nbOuvrages, nbEmprunts, nbReservations] = await Promise.all([
     prisma.utilisateur.count(),
     prisma.ouvrage.count(),
     prisma.emprunt.count(),
+    prisma.reservation.count(),
   ]);
   console.log(
-    `Seed terminé : ${nbUtilisateurs} utilisateurs, ${nbOuvrages} ouvrages, ${nbEmprunts} emprunts.`,
+    `Seed terminé : ${nbUtilisateurs} utilisateurs, ${nbOuvrages} ouvrages, ` +
+      `${nbEmprunts} emprunts, ${nbReservations} réservation.`,
   );
 }
 

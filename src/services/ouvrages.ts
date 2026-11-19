@@ -5,9 +5,9 @@ import * as ouvrages from "../repositories/ouvrages.ts";
 /**
  * Retire un ouvrage du catalogue.
  * - emprunté : 409 ;
- * - sans aucun emprunt : supprimé définitivement ;
+ * - sans aucun emprunt ni réservation : supprimé définitivement ;
  * - avec un historique : archivé (archiveLe renseigné). Il n'apparaît plus dans le catalogue,
- *   ne peut plus être emprunté ni modifié, et son historique reste consultable.
+ *   ne peut plus être emprunté, réservé ni modifié, et son historique reste consultable.
  * Renvoie « supprime » ou « archive ».
  */
 export async function supprimer(id: number): Promise<"supprime" | "archive"> {

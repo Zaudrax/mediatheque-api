@@ -2,7 +2,7 @@ import type { Request, RequestHandler } from "express";
 import type { ConfigJwt } from "../config.ts";
 import { Interdit, NonAuthentifie } from "../erreurs.ts";
 import { verifierAccess } from "../services/jetons.ts";
-import type { PorteeEmprunts, Role, UtilisateurConnecte } from "../types/domaine.ts";
+import type { PorteeEmprunts, PorteeReservations, Role, UtilisateurConnecte } from "../types/domaine.ts";
 
 /**
  * Exige un access token valide dans l'en-tête « Authorization: Bearer <jeton> ».
@@ -45,3 +45,6 @@ export const estBibliothecaire = (utilisateur: UtilisateurConnecte): boolean =>
 /** Un membre n'accède qu'à ses lignes ; un bibliothécaire à toutes. */
 export const porteeEmprunts = (u: UtilisateurConnecte): PorteeEmprunts =>
   estBibliothecaire(u) ? {} : { emprunteurId: u.id };
+
+export const porteeReservations = (u: UtilisateurConnecte): PorteeReservations =>
+  estBibliothecaire(u) ? {} : { membreId: u.id };

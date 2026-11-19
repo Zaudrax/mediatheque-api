@@ -8,17 +8,18 @@ datasource db {
 }
 
 model Ouvrage {
-  id         Int       @id @default(autoincrement())
-  titre      String    @db.VarChar(150)
-  auteur     String    @db.VarChar(120)
-  annee      Int
-  disponible Boolean   @default(true)
-  /// Archivage logique : un ouvrage qui a un historique d'emprunts n'est pas supprimé
-  /// mais archivé ; il disparaît du catalogue et son historique est conservé.
-  archiveLe  DateTime? @map("archive_le")
-  creeLe     DateTime  @default(now()) @map("cree_le")
-  modifieLe  DateTime  @updatedAt @map("modifie_le")
-  emprunts   Emprunt[]
+  id           Int           @id @default(autoincrement())
+  titre        String        @db.VarChar(150)
+  auteur       String        @db.VarChar(120)
+  annee        Int
+  disponible   Boolean       @default(true)
+  /// Archivage logique : un ouvrage qui a un historique d'emprunts ou de réservations n'est pas
+  /// supprimé mais archivé ; il disparaît du catalogue et son historique est conservé.
+  archiveLe    DateTime?     @map("archive_le")
+  creeLe       DateTime      @default(now()) @map("cree_le")
+  modifieLe    DateTime      @updatedAt @map("modifie_le")
+  emprunts     Emprunt[]
+  reservations Reservation[]
 
   @@index([disponible])
   @@map("ouvrages")
@@ -37,6 +38,7 @@ model Utilisateur {
   creeLe          DateTime       @default(now()) @map("cree_le")
   modifieLe       DateTime       @updatedAt @map("modifie_le")
   emprunts        Emprunt[]
+  reservations    Reservation[]
   refreshTokens   RefreshToken[]
 
   @@map("utilisateurs")
@@ -56,21 +58,53 @@ model RefreshToken {
 }
 
 model Emprunt {
-  id               Int         @id @default(autoincrement())
-  ouvrageId        Int         @map("ouvrage_id")
+  id               Int          @id @default(autoincrement())
+  ouvrageId        Int          @map("ouvrage_id")
   // Restrict : on ne supprime pas un ouvrage qui a un historique d'emprunts (P2003 → 409).
-  ouvrage          Ouvrage     @relation(fields: [ouvrageId], references: [id], onDelete: Restrict)
-  emprunteurId     Int         @map("emprunteur_id")
-  emprunteur       Utilisateur @relation(fields: [emprunteurId], references: [id], onDelete: Restrict)
-  dateEmprunt      DateTime    @map("date_emprunt")
-  dateRetourPrevue DateTime    @map("date_retour_prevue")
-  rendu            Boolean     @default(false)
-  renduLe          DateTime?   @map("rendu_le")
-  creeLe           DateTime    @default(now()) @map("cree_le")
-  modifieLe        DateTime    @updatedAt @map("modifie_le")
+  ouvrage          Ouvrage      @relation(fields: [ouvrageId], references: [id], onDelete: Restrict)
+  emprunteurId     Int          @map("emprunteur_id")
+  emprunteur       Utilisateur  @relation(fields: [emprunteurId], references: [id], onDelete: Restrict)
+  dateEmprunt      DateTime     @map("date_emprunt")
+  dateRetourPrevue DateTime     @map("date_retour_prevue")
+  rendu            Boolean      @default(false)
+  reservation      Reservation?
+  renduLe          DateTime?    @map("rendu_le")
+  creeLe           DateTime     @default(now()) @map("cree_le")
+  modifieLe        DateTime     @updatedAt @map("modifie_le")
 
   @@index([ouvrageId])
   @@index([emprunteurId])
   @@index([rendu])
   @@map("emprunts")
+}
+
+enum StatutReservation {
+  active
+  honoree
+  annulee
+}
+
+/// File d'attente sur un ouvrage indisponible : au retour de l'ouvrage, la réservation active
+/// la plus ancienne devient un emprunt.
+model Reservation {
+  id        Int               @id @default(autoincrement())
+  ouvrageId Int               @map("ouvrage_id")
+  ouvrage   Ouvrage           @relation(fields: [ouvrageId], references: [id], onDelete: Restrict)
+  membreId  Int               @map("membre_id")
+  membre    Utilisateur       @relation(fields: [membreId], references: [id], onDelete: Restrict)
+  statut    StatutReservation @default(active)
+  /// true tant que la réservation est active, NULL ensuite. PostgreSQL considère les NULL
+  /// comme distincts : l'index unique n'interdit donc qu'une seconde réservation ACTIVE
+  /// du même membre sur le même ouvrage, l'historique restant illimité.
+  active    Boolean?          @default(true)
+  creeLe    DateTime          @default(now()) @map("cree_le")
+  modifieLe DateTime          @updatedAt @map("modifie_le")
+  /// Emprunt créé au retour de l'ouvrage (statut honoree).
+  empruntId Int?              @unique @map("emprunt_id")
+  emprunt   Emprunt?          @relation(fields: [empruntId], references: [id], onDelete: SetNull)
+
+  @@unique([ouvrageId, membreId, active], name: "uneReservationActiveParMembre")
+  @@index([ouvrageId, statut, creeLe])
+  @@index([membreId])
+  @@map("reservations")
 }

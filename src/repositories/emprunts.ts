@@ -76,6 +76,10 @@ export function existe(id: number, portee: PorteeEmprunts, client: ClientDb) {
   return client.emprunt.findFirst({ where: { id, ...portee }, select: { id: true } });
 }
 
+export function membreEmprunteDeja(ouvrageId: number, emprunteurId: number, client: ClientDb) {
+  return client.emprunt.findFirst({ where: { ouvrageId, emprunteurId, rendu: false }, select: { id: true } });
+}
+
 /** Identifiant inconnu : P2025 → 404. */
 export function supprimer(id: number, client: ClientDb) {
   return client.emprunt.delete({ where: { id } });

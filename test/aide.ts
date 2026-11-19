@@ -34,7 +34,7 @@ export async function reinitialiserBase(): Promise<void> {
   hache ??= await hacherMotDePasse(MOT_DE_PASSE);
   const motDePasseHache = hache;
   await prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`TRUNCATE TABLE refresh_tokens, emprunts, ouvrages, utilisateurs RESTART IDENTITY CASCADE`;
+    await tx.$executeRaw`TRUNCATE TABLE refresh_tokens, reservations, emprunts, ouvrages, utilisateurs RESTART IDENTITY CASCADE`;
     await tx.utilisateur.createMany({
       data: [
         { email: comptes.bibliothecaire.email, motDePasseHache, role: "bibliothecaire" },

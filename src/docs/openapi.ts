@@ -4,6 +4,7 @@ import { connexion, inscription, Jetons, rafraichissement, UtilisateurPublic } f
 import { Erreur, listePaginee, paramsId } from "../schemas/commun.ts";
 import { creerEmprunt, Emprunt, listerEmprunts, modifierEmprunt } from "../schemas/emprunts.ts";
 import { creerOuvrage, listerOuvrages, modifierOuvrage, Ouvrage } from "../schemas/ouvrages.ts";
+import { creerReservation, listerReservations, Reservation } from "../schemas/reservations.ts";
 
 const DESCRIPTIONS_ERREURS = {
   400: "Entrée invalide : la liste des champs fautifs figure dans details",
@@ -36,6 +37,14 @@ const sansContenu = (description: string) => ({ [204]: { description } });
 
 const op = (operation: ZodOpenApiOperationObject): ZodOpenApiOperationObject => operation;
 
+const RetourEmprunt = Emprunt.extend({
+  empruntSuivantId: z
+    .number()
+    .int()
+    .nullable()
+    .meta({ description: "Emprunt créé pour la réservation la plus ancienne, s'il y en avait une" }),
+}).meta({ id: "RetourEmprunt" });
+
 const Sante = z.object({ statut: z.string(), baseDeDonnees: z.string() }).meta({ id: "Sante" });
 
 /** Spécification OpenAPI 3.1 générée depuis les schémas Zod qui valident les requêtes. */
@@ -46,12 +55,12 @@ export function genererSpecification() {
       title: "API de la médiathèque",
       version: "1.0.0",
       description:
-        "Catalogue et emprunts de la médiathèque associative.\n\n" +
+        "Catalogue, emprunts et réservations de la médiathèque associative.\n\n" +
         "Authentification : `POST /api/auth/connexion` renvoie un access token (15 min) à envoyer " +
         "dans l'en-tête `Authorization: Bearer <jeton>`, et un refresh token à usage unique " +
         "pour `POST /api/auth/rafraichir`.\n\n" +
-        "Rôles : **membre** (catalogue en lecture, ses propres emprunts) et " +
-        "**bibliothecaire** (gestion du catalogue et de tous les emprunts).",
+        "Rôles : **membre** (catalogue en lecture, ses propres emprunts et réservations) et " +
+        "**bibliothecaire** (gestion du catalogue, de tous les emprunts et réservations).",
     },
     servers: [{ url: "/", description: "Serveur courant" }],
     tags: [
@@ -59,6 +68,7 @@ export function genererSpecification() {
       { name: "Authentification" },
       { name: "Ouvrages" },
       { name: "Emprunts" },
+      { name: "Réservations" },
     ],
     components: {
       securitySchemes: {
@@ -158,7 +168,7 @@ export function genererSpecification() {
           summary: "Retirer un ouvrage du catalogue (bibliothécaire)",
           description:
             "409 si l'ouvrage est emprunté. Sans historique, il est supprimé définitivement ; " +
-            "avec un historique d'emprunts, il est archivé : il disparaît du catalogue " +
+            "avec un historique d'emprunts ou de réservations, il est archivé : il disparaît du catalogue " +
             "(404 ensuite) et son historique reste consultable.",
           ...securise,
           requestParams: { path: paramsId },
@@ -213,10 +223,45 @@ export function genererSpecification() {
         post: op({
           tags: ["Emprunts"],
           summary: "Rendre un ouvrage",
-          description: "L'ouvrage redevient disponible dans la même transaction. 409 si l'emprunt est déjà rendu.",
+          description: "Dans la même transaction, la réservation active la plus ancienne de l'ouvrage devient un emprunt ; sans réservation, l'ouvrage redevient disponible.",
           ...securise,
           requestParams: { path: paramsId },
-          responses: reponses({ 200: json(Emprunt, "Emprunt rendu") }, 400, 401, 404, 409),
+          responses: reponses({ 200: json(RetourEmprunt, "Emprunt rendu") }, 400, 401, 404, 409),
+        }),
+      },
+
+      // ------------------------------------------------------------ Réservations
+      "/api/reservations": {
+        get: op({
+          tags: ["Réservations"],
+          summary: "Lister les réservations (les siennes pour un membre, toutes pour un bibliothécaire)",
+          ...securise,
+          requestParams: { query: listerReservations },
+          responses: reponses({ 200: json(listePaginee(Reservation), "Page de réservations") }, 400, 401),
+        }),
+        post: op({
+          tags: ["Réservations"],
+          summary: "Réserver un ouvrage indisponible",
+          description: "409 si l'ouvrage est disponible, si le membre l'emprunte déjà ou s'il a déjà une réservation active dessus.",
+          ...securise,
+          requestBody: corps(creerReservation),
+          responses: reponses({ 201: json(Reservation, "Réservation créée") }, 400, 401, 404, 409),
+        }),
+      },
+      "/api/reservations/{id}": {
+        get: op({
+          tags: ["Réservations"],
+          summary: "Détail d'une réservation",
+          ...securise,
+          requestParams: { path: paramsId },
+          responses: reponses({ 200: json(Reservation, "Réservation") }, 400, 401, 404),
+        }),
+        delete: op({
+          tags: ["Réservations"],
+          summary: "Annuler une réservation active",
+          ...securise,
+          requestParams: { path: paramsId },
+          responses: reponses(sansContenu("Réservation annulée"), 400, 401, 404, 409),
         }),
       },
     },

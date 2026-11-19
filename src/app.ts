@@ -10,6 +10,7 @@ import { routeurAuth } from "./routes/auth.ts";
 import { routeurDocs } from "./routes/docs.ts";
 import { routeurEmprunts } from "./routes/emprunts.ts";
 import { routeurOuvrages } from "./routes/ouvrages.ts";
+import { routeurReservations } from "./routes/reservations.ts";
 
 /**
  * Construit l'application sans écouter de port : index.ts s'en charge, les tests aussi
@@ -40,7 +41,8 @@ export function creerApp(config: Config = lireConfig()): Express {
   app.use("/api", routeurDocs());
   app.use("/api/auth", limiteurDebit(config.limites.auth), routeurAuth(config));
   app.use("/api/ouvrages", authentifie, routeurOuvrages());
-  app.use("/api/emprunts", authentifie, routeurEmprunts());
+  app.use("/api/emprunts", authentifie, routeurEmprunts(config));
+  app.use("/api/reservations", authentifie, routeurReservations());
 
   app.use(routeInconnue);
   app.use(gestionErreurs);

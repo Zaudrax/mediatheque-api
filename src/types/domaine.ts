@@ -10,6 +10,7 @@ export interface UtilisateurConnecte {
 
 /** Restreint une requête aux lignes d'un membre ; vide pour un bibliothécaire. */
 export type PorteeEmprunts = { emprunteurId?: number };
+export type PorteeReservations = { membreId?: number };
 
 export interface Page<T> {
   donnees: T[];
