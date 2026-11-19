@@ -380,6 +380,145 @@ DELETE {{base}}/api/emprunts/9999
 Authorization: Bearer {{biblio}}
 
 # =====================================================================
+# RÉSERVATIONS
+# État à ce stade : ouvrage 1 emprunté par Camille (réservé par Léon, réservation 1),
+# ouvrage 5 emprunté par Léon, ouvrage 3 disponible.
+# =====================================================================
+
+### Camille réserve l'ouvrage 5, emprunté par Léon (201)
+# @name reservationCamille
+POST {{base}}/api/reservations
+Authorization: Bearer {{camille}}
+Content-Type: {{json}}
+
+{
+  "ouvrageId": 5,
+  "membreId": 3
+}
+
+### Erreur : une seule réservation active par membre et par ouvrage (409)
+POST {{base}}/api/reservations
+Authorization: Bearer {{camille}}
+Content-Type: {{json}}
+
+{
+  "ouvrageId": 5
+}
+
+### Erreur : réserver un ouvrage disponible (409, il suffit de l'emprunter)
+POST {{base}}/api/reservations
+Authorization: Bearer {{camille}}
+Content-Type: {{json}}
+
+{
+  "ouvrageId": 3
+}
+
+### Erreur : réserver un ouvrage qu'on emprunte déjà (409)
+POST {{base}}/api/reservations
+Authorization: Bearer {{camille}}
+Content-Type: {{json}}
+
+{
+  "ouvrageId": 1
+}
+
+### Erreur : ouvrage inconnu (404)
+POST {{base}}/api/reservations
+Authorization: Bearer {{camille}}
+Content-Type: {{json}}
+
+{
+  "ouvrageId": 9999
+}
+
+### Camille liste ses réservations (200)
+GET {{base}}/api/reservations
+Authorization: Bearer {{camille}}
+
+### Le bibliothécaire liste toutes les réservations actives (200)
+GET {{base}}/api/reservations?statut=active
+Authorization: Bearer {{biblio}}
+
+### Erreur : Camille ne voit pas la réservation de Léon (404)
+GET {{base}}/api/reservations/1
+Authorization: Bearer {{camille}}
+
+### Erreur : Camille n'annule pas la réservation de Léon (404)
+DELETE {{base}}/api/reservations/1
+Authorization: Bearer {{camille}}
+
+### Erreur : filtre de statut invalide (400)
+GET {{base}}/api/reservations?statut=perdue
+Authorization: Bearer {{camille}}
+
+### Camille rend l'ouvrage 1 (200) : la réservation de Léon devient un emprunt (empruntSuivantId)
+POST {{base}}/api/emprunts/1/retour
+Authorization: Bearer {{camille}}
+
+### La réservation de Léon est honorée (200, statut honoree, empruntId renseigné)
+GET {{base}}/api/reservations/1
+Authorization: Bearer {{biblio}}
+
+### Camille annule sa réservation (204)
+DELETE {{base}}/api/reservations/{{reservationCamille.response.body.id}}
+Authorization: Bearer {{camille}}
+
+### Erreur : réservation déjà annulée (409)
+DELETE {{base}}/api/reservations/{{reservationCamille.response.body.id}}
+Authorization: Bearer {{camille}}
+
+# =====================================================================
+# ASSISTANT (réponses en Server-Sent Events)
+# =====================================================================
+
+### Question sur le catalogue (200, flux SSE : event outil, data delta…, event fin)
+POST {{base}}/api/assistant/flux
+Authorization: Bearer {{camille}}
+Content-Type: {{json}}
+
+{
+  "question": "Avez-vous un roman de Zola ?"
+}
+
+### Question sur ses emprunts : l'outil ne voit que ceux de Camille (200)
+POST {{base}}/api/assistant/flux
+Authorization: Bearer {{camille}}
+Content-Type: {{json}}
+
+{
+  "question": "Quels sont mes emprunts en cours ?"
+}
+
+### Erreur : question vide (400)
+POST {{base}}/api/assistant/flux
+Authorization: Bearer {{camille}}
+Content-Type: {{json}}
+
+{
+  "question": ""
+}
+
+### Erreur : sans jeton (401)
+POST {{base}}/api/assistant/flux
+Content-Type: {{json}}
+
+{
+  "question": "Bonjour"
+}
+
+### Effacer la conversation de Camille (204)
+DELETE {{base}}/api/assistant/memoire
+Authorization: Bearer {{camille}}
+
+# =====================================================================
+# DOCUMENTATION
+# =====================================================================
+
+### Spécification OpenAPI 3.1 (200) — Swagger UI : http://localhost:3000/api/docs
+GET {{base}}/api/docs.json
+
+# =====================================================================
 # DURCISSEMENT ET DIVERS
 # =====================================================================
 
