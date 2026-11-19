@@ -16,5 +16,23 @@ services:
       timeout: 3s
       retries: 10
 
+  # API conteneurisée : docker compose --profile app up --build
+  # Applique les migrations puis démarre l'API compilée.
+  api:
+    profiles: ["app"]
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Dans le réseau Docker, la base s'appelle « postgres » et écoute sur 5432.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-mediatheque}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-mediatheque}?schema=public
+      PORT: "3000"
+    command: ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]
+    ports:
+      - "127.0.0.1:${API_PORT:-3000}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   pgdata:
